@@ -1,0 +1,51 @@
+name: meal_mind
+description: "A new Flutter project."
+publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.8
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # The following adds the Cupertino Icons font to your application.
+  # Use with the CupertinoIcons class for iOS style icons.
+  cupertino_icons: ^1.0.8
+  http: ^1.6.0
+  firebase_core: ^4.15.0
+  firebase_auth: ^6.7.0
+  cloud_firestore: ^6.10.0
+  google_fonts: ^8.2.1
+  provider: ^6.1.5+1
+  flutter_dotenv: ^6.0.1
+
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_native_splash: ^2.4.0
+  flutter_launcher_icons: ^0.14.4
+
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "lib/assets/pot-icon.png"
+  adaptive_icon_background: "#4E7F3B"
+  adaptive_icon_foreground: "lib/assets/pot-icon.png"
+  remove_alpha_ios: true
+
+flutter_native_splash:
+  color: "#4E7F3B"
+  image: lib/assets/pot-icon.png
+  android_12:
+    color: "#4E7F3B"
+    image: lib/assets/pot-icon.png
+
+flutter:
+  uses-material-design: true
+  assets:
+    - lib/assets/pot-icon.png

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "880175474616",
+    "project_id": "mealmind-e00b5",
+    "storage_bucket": "mealmind-e00b5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:880175474616:android:7a0e733bd723cabd2dd14d",
+        "android_client_info": {
+          "package_name": "com.example.meal_mind"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAjG3BPQ3gaIi4Mg_RB6pRy7Rvtx63e2ZQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
