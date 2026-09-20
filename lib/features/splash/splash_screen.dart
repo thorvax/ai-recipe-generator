@@ -55,10 +55,10 @@ class _SplashScreenState extends State<SplashScreen> {
                 shape: BoxShape.circle,
               ),
               child: Padding(
-                padding: const EdgeInsets.all(0),
+                padding: const EdgeInsets.all(AppSpacing.s20),
                 child: Image.asset(
                   'lib/assets/pot-icon.png',
-                  fit: BoxFit.fill,
+                  fit: BoxFit.contain,
                 ),
               ),
             ),
