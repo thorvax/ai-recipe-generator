@@ -43,7 +43,7 @@ class RatingStats {
 
   factory RatingStats.fromRatings(List<Rating> ratings) {
     if (ratings.isEmpty) return const RatingStats(average: 0, count: 0);
-    final total = ratings.fold<int>(0, (sum, r) => sum + r.value);
+    final total = ratings.fold<int>(0, (rSum, r) => rSum + r.value);
     return RatingStats(average: total / ratings.length, count: ratings.length);
   }
 }
