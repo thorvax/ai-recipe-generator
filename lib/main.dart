@@ -6,6 +6,7 @@ import 'app.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
 import 'providers/recipe_provider.dart';
+import 'providers/saved_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -16,6 +17,7 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => RecipeProvider()),
+        ChangeNotifierProvider(create: (_) => SavedProvider()),
       ],
       child: const MealMindApp(),
     ),
