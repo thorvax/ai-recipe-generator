@@ -23,48 +23,20 @@ class ServingsStepper extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        _RoundButton(
-          icon: Icons.add,
-          onTap: value < max ? () => onChanged(value + 1) : null,
+        IconButton(
+          icon: const Icon(Icons.remove),
+          onPressed: value > min ? () => onChanged(value - 1) : null,
         ),
-        const SizedBox(width: AppSpacing.s12),
-        _RoundButton(
-          icon: Icons.remove,
-          onTap: value > min ? () => onChanged(value - 1) : null,
-        ),
-        const SizedBox(width: AppSpacing.s16),
+        
+        const SizedBox(width: AppSpacing.s8),
         Text('$value', style: AppTextStyles.body1),
+        const SizedBox(width: AppSpacing.s8),
+
+        IconButton(
+          icon: const Icon(Icons.add),
+          onPressed: value < max ? () => onChanged(value + 1) : null,
+        ),
       ],
-    );
-  }
-}
-
-class _RoundButton extends StatelessWidget {
-  final IconData icon;
-  final VoidCallback? onTap;
-
-  const _RoundButton({required this.icon, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    final enabled = onTap != null;
-    return InkWell(
-      customBorder: const CircleBorder(),
-      onTap: onTap,
-      child: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          shape: BoxShape.circle,
-          border: Border.all(color: AppColors.border),
-        ),
-        child: Icon(
-          icon,
-          size: 20,
-          color: enabled ? AppColors.primary : AppColors.textSecondary,
-        ),
-      ),
     );
   }
 }
