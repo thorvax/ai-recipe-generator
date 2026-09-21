@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'app.dart';
 import 'firebase_options.dart';
 import 'providers/auth_provider.dart';
+import 'providers/community_provider.dart';
 import 'providers/recipe_provider.dart';
 import 'providers/saved_provider.dart';
 
@@ -18,6 +19,7 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => RecipeProvider()),
         ChangeNotifierProvider(create: (_) => SavedProvider()),
+        ChangeNotifierProvider(create: (_) => CommunityProvider()),
       ],
       child: const MealMindApp(),
     ),

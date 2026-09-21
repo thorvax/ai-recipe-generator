@@ -3,9 +3,12 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../providers/auth_provider.dart';
+import '../../providers/community_provider.dart';
 import '../../providers/saved_provider.dart';
 import '../../shared/widgets/recipe_content.dart';
 import '../../shared/widgets/secondary_button.dart';
+import '../community/widgets/post_recipe_sheet.dart';
 import 'widgets/category_sheet.dart';
 
 /// Full view of a saved recipe, with Remove from Collection.
@@ -30,6 +33,30 @@ class SavedRecipeDetailScreen extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(error ?? 'Moved to $name')),
+    );
+  }
+
+  Future<void> _post(BuildContext context) async {
+    final saved = context.read<SavedProvider>().findById(savedId);
+    if (saved == null) return;
+
+    final caption = await showPostRecipeSheet(
+      context,
+      recipeName: saved.recipe.name,
+    );
+    if (caption == null || !context.mounted) return;
+
+    final auth = context.read<AuthProvider>();
+    final error = await context.read<CommunityProvider>().post(
+          userId: auth.currentUser?.uid ?? saved.userId,
+          posterName: auth.displayName,
+          recipeId: saved.recipeId,
+          recipe: saved.recipe,
+          caption: caption,
+        );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Posted to the community')),
     );
   }
 
@@ -92,12 +119,7 @@ class SavedRecipeDetailScreen extends StatelessWidget {
               if (value == 'category') {
                 _changeCategory(context);
               } else {
-                // Posting to the community is built in Step 7.
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Posting is coming in a later step.'),
-                  ),
-                );
+                _post(context);
               }
             },
             itemBuilder: (_) => const [
