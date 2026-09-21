@@ -6,6 +6,7 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../providers/auth_provider.dart';
+import '../../providers/saved_provider.dart';
 import '../../shared/widgets/secondary_button.dart';
 
 /// TEMPORARY profile tab: name, email, log out.
@@ -36,6 +37,7 @@ class SettingsScreen extends StatelessWidget {
             SecondaryButton(
               label: 'Log out',
               onPressed: () async {
+                context.read<SavedProvider>().stop();
                 await auth.signOut();
                 if (context.mounted) {
                   Navigator.pushNamedAndRemoveUntil(
