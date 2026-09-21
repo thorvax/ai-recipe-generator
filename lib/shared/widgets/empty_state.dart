@@ -5,7 +5,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import 'primary_button.dart';
 
-/// Icon + title + message + optional action button.
+/// Grey icon + title + message + optional action button.
 class EmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -30,15 +30,8 @@ class EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              padding: const EdgeInsets.all(AppSpacing.s24),
-              decoration: const BoxDecoration(
-                color: AppColors.primaryLight,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(icon, size: 48, color: AppColors.primary),
-            ),
-            const SizedBox(height: AppSpacing.s24),
+            Icon(icon, size: 64, color: const Color(0xFFBDBDBD)),
+            const SizedBox(height: AppSpacing.s16),
             Text(title, style: AppTextStyles.heading2, textAlign: TextAlign.center),
             const SizedBox(height: AppSpacing.s8),
             Text(
@@ -47,8 +40,11 @@ class EmptyState extends StatelessWidget {
               textAlign: TextAlign.center,
             ),
             if (actionLabel != null && onAction != null) ...[
-              const SizedBox(height: AppSpacing.s24),
-              PrimaryButton(label: actionLabel!, onPressed: onAction),
+              const SizedBox(height: AppSpacing.s16),
+              SizedBox(
+                width: 260,
+                child: PrimaryButton(label: actionLabel!, onPressed: onAction),
+              ),
             ],
           ],
         ),
