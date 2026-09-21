@@ -18,6 +18,13 @@ class RecipeProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   Recipe? get currentRecipe => _currentRecipe;
 
+  /// Forget the current recipe (used on logout).
+  void clear() {
+    _currentRecipe = null;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   /// Generates a recipe, saves the request + recipe to Firestore,
   /// and returns true on success.
   Future<bool> generate({

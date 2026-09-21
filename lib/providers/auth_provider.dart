@@ -17,6 +17,15 @@ class AuthProvider extends ChangeNotifier {
   User? get currentUser => _service.currentUser;
   bool get isLoggedIn => currentUser != null;
 
+  /// Name shown to other users: display name, else the part before "@".
+  String get displayName {
+    final user = currentUser;
+    final name = user?.displayName?.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    final email = user?.email ?? '';
+    return email.contains('@') ? email.split('@').first : 'Cook';
+  }
+
   void clearError() {
     if (_errorMessage == null) return;
     _errorMessage = null;
@@ -52,6 +61,8 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> signIn({required String email, required String password}) =>
       _run(() => _service.signIn(email: email, password: password));
+
+  Future<bool> updateName(String name) => _run(() => _service.updateName(name));
 
   Future<bool> sendPasswordReset(String email) =>
       _run(() => _service.sendPasswordReset(email));

@@ -66,6 +66,24 @@ class AuthService {
     }
   }
 
+  /// Changes the display name in Firebase Auth and in users/{uid}.
+  Future<void> updateName(String name) async {
+    final user = _auth.currentUser;
+    if (user == null) throw AuthException('You are not logged in.');
+    final trimmed = name.trim();
+    try {
+      await user.updateDisplayName(trimmed);
+      await user.reload();
+      await _db.collection('users').doc(user.uid).set({
+        'user_id': user.uid,
+        'email': user.email,
+        'name': trimmed,
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 8));
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyMessage(e.code));
+    }
+  }
+
   Future<void> signOut() => _auth.signOut();
 
   String _friendlyMessage(String code) {
