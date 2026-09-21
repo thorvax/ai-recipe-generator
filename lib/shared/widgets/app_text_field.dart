@@ -17,6 +17,7 @@ class AppTextField extends StatefulWidget {
   final IconData? prefixIcon;
   final bool isPassword;
   final int maxLines;
+  final FocusNode? focusNode;
 
   const AppTextField({
     super.key,
@@ -31,6 +32,7 @@ class AppTextField extends StatefulWidget {
     this.prefixIcon,
     this.isPassword = false,
     this.maxLines = 1,
+    this.focusNode,
   });
 
   @override
@@ -58,6 +60,7 @@ class _AppTextFieldState extends State<AppTextField> {
         ],
         TextFormField(
           controller: widget.controller,
+          focusNode: widget.focusNode,
           validator: widget.validator,
           onChanged: widget.onChanged,
           onFieldSubmitted: widget.onSubmitted,

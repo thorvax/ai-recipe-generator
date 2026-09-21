@@ -5,12 +5,12 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 
 /// Pill chip used for meal type, cuisine, dietary options, categories,
-/// and removable ingredient tags (pass [onDeleted]).
+/// and removable ingredient tags (pass [onDeleted] to show the "×").
 class AppChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback? onTap;
-  final VoidCallback? onDeleted; // shows a small "x" when provided
+  final VoidCallback? onDeleted;
 
   const AppChip({
     super.key,
@@ -22,17 +22,12 @@ class AppChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final Color bg = selected ? AppColors.primary : AppColors.white;
+    final Color bg = selected ? AppColors.primary : AppColors.surface;
     final Color fg = selected ? AppColors.white : AppColors.textPrimary;
 
     return Material(
       color: bg,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.r24),
-        side: BorderSide(
-          color: selected ? AppColors.primary : AppColors.border,
-        ),
-      ),
+      borderRadius: BorderRadius.circular(AppRadius.r24),
       child: InkWell(
         borderRadius: BorderRadius.circular(AppRadius.r24),
         onTap: onTap,

@@ -118,19 +118,23 @@ Available ingredients: $ingredients
 Meal type: ${r.mealType ?? 'no preference'}
 Cuisine: ${r.cuisine ?? 'no preference'}
 Servings: ${r.servings}
-Dietary restriction: ${r.dietaryRestriction ?? 'none'}
+Dietary needs: ${r.dietaryNeeds.isEmpty ? 'none' : r.dietaryNeeds.join(', ')}
+Additional notes from the user: ${r.notes ?? 'none'}
 
 Rules:
 - Build the recipe mainly from the available ingredients. You may also assume
   basic pantry items (salt, pepper, cooking oil, water) and add at most a few
   other common ingredients if really needed.
-- Strictly follow the dietary restriction and cuisine if given.
+- Strictly follow the dietary needs and cuisine if given.
 - Scale every quantity for exactly ${r.servings} servings.
 - Give precise quantities with units (use an empty unit for countable items
   such as "2 eggs").
 - Write clear, numbered-style steps that a beginner can follow. Each step is
   one short paragraph.
-- cooking_time is the total time in minutes, as a whole number.
+- prep_time is the preparation time in minutes and cooking_time is the actual
+  cooking time in minutes (both whole numbers).
+- description is one friendly sentence (max 25 words) describing the dish.
+- Respect the additional notes (for example allergies or spice level).
 ''';
   }
 
@@ -139,6 +143,8 @@ Rules:
     'type': 'OBJECT',
     'properties': {
       'recipe_name': {'type': 'STRING'},
+      'description': {'type': 'STRING'},
+      'prep_time': {'type': 'INTEGER'},
       'cooking_time': {'type': 'INTEGER'},
       'ingredients': {
         'type': 'ARRAY',
@@ -157,7 +163,14 @@ Rules:
         'items': {'type': 'STRING'},
       },
     },
-    'required': ['recipe_name', 'cooking_time', 'ingredients', 'steps'],
+    'required': [
+      'recipe_name',
+      'description',
+      'prep_time',
+      'cooking_time',
+      'ingredients',
+      'steps',
+    ],
   };
 
   String _messageForStatus(int code) {

@@ -6,7 +6,7 @@
 class Env {
   Env._();
 
-  static const String geminiApiKey = 'AQ.Ab8RN6KwC4L8omK03MrDMfyaKLTfTeI12nkcQfCDIscskYJC0';
+  static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
 
   /// Model id. Flash-Lite models have the most generous free daily limit.
   /// If you get a "model not found" error, check the current model list in

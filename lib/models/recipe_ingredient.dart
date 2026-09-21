@@ -24,6 +24,10 @@ class RecipeIngredient {
         'unit': unit,
       };
 
+  /// Right-hand side of an ingredient row: "1 cup", "3 cloves"
+  String get amountLabel =>
+      [quantity, unit].where((s) => s.trim().isNotEmpty).join(' ');
+
   /// "2 cups rice", "3 garlic cloves"
   String get display =>
       [quantity, unit, name].where((s) => s.trim().isNotEmpty).join(' ');

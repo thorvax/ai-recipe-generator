@@ -10,11 +10,13 @@ class Recipe {
   final String? id; // null until it is saved to Firestore
   final String userId;
   final String name;
+  final String description; // one or two friendly sentences
   final String mealType;
   final String cuisine;
   final int servings;
-  final int cookingTime; // minutes
-  final String dietaryRestriction;
+  final int prepTime; // minutes
+  final int cookingTime; // minutes (cook time only)
+  final String dietaryRestriction; // e.g. "Vegetarian, Gluten-free" or "None"
   final List<RecipeIngredient> ingredients;
   final List<RecipeStep> steps;
   final DateTime? createdAt;
@@ -23,9 +25,11 @@ class Recipe {
     this.id,
     required this.userId,
     required this.name,
+    required this.description,
     required this.mealType,
     required this.cuisine,
     required this.servings,
+    required this.prepTime,
     required this.cookingTime,
     required this.dietaryRestriction,
     required this.ingredients,
@@ -34,7 +38,7 @@ class Recipe {
   });
 
   /// Build a Recipe from the JSON that Gemini returns.
-  /// The meal type / cuisine / servings / diet come from the user's request.
+  /// Meal type / cuisine / servings / diet come from the user's request.
   factory Recipe.fromGemini({
     required Map<String, dynamic> json,
     required GenerationRequest request,
@@ -46,11 +50,15 @@ class Recipe {
     return Recipe(
       userId: userId,
       name: json['recipe_name']?.toString().trim() ?? '',
+      description: json['description']?.toString().trim() ?? '',
       mealType: request.mealType ?? 'Any',
       cuisine: request.cuisine ?? 'Any',
       servings: request.servings,
+      prepTime: (json['prep_time'] as num?)?.toInt() ?? 0,
       cookingTime: (json['cooking_time'] as num?)?.toInt() ?? 0,
-      dietaryRestriction: request.dietaryRestriction ?? 'None',
+      dietaryRestriction: request.dietaryNeeds.isEmpty
+          ? 'None'
+          : request.dietaryNeeds.join(', '),
       ingredients: rawIngredients
           .map((e) => RecipeIngredient.fromMap(Map<String, dynamic>.from(e)))
           .toList(),
@@ -64,9 +72,11 @@ class Recipe {
   Map<String, dynamic> toMap() => {
         'user_id': userId,
         'recipe_name': name,
+        'description': description,
         'meal_type': mealType,
         'cuisine': cuisine,
         'servings': servings,
+        'prep_time': prepTime,
         'cooking_time': cookingTime,
         'dietary_restriction': dietaryRestriction,
         'ingredients': ingredients.map((i) => i.toMap()).toList(),
@@ -80,9 +90,11 @@ class Recipe {
       id: id,
       userId: map['user_id']?.toString() ?? '',
       name: map['recipe_name']?.toString() ?? '',
+      description: map['description']?.toString() ?? '',
       mealType: map['meal_type']?.toString() ?? 'Any',
       cuisine: map['cuisine']?.toString() ?? 'Any',
       servings: (map['servings'] as num?)?.toInt() ?? 1,
+      prepTime: (map['prep_time'] as num?)?.toInt() ?? 0,
       cookingTime: (map['cooking_time'] as num?)?.toInt() ?? 0,
       dietaryRestriction: map['dietary_restriction']?.toString() ?? 'None',
       ingredients: ((map['ingredients'] as List?) ?? [])
@@ -99,9 +111,11 @@ class Recipe {
         id: id ?? this.id,
         userId: userId,
         name: name,
+        description: description,
         mealType: mealType,
         cuisine: cuisine,
         servings: servings,
+        prepTime: prepTime,
         cookingTime: cookingTime,
         dietaryRestriction: dietaryRestriction,
         ingredients: ingredients,
@@ -109,6 +123,15 @@ class Recipe {
         createdAt: createdAt,
       );
 
-  /// "2 servings · 30 mins" (matches the Caption style in the design)
-  String get summaryLabel => '$servings servings · $cookingTime mins';
+  /// Orange tag chips under the recipe: diet(s) + cuisine.
+  List<String> get tags => [
+        ...dietaryRestriction
+            .split(',')
+            .map((s) => s.trim())
+            .where((s) => s.isNotEmpty && s != 'None'),
+        if (cuisine != 'Any') cuisine,
+      ];
+
+  /// "2 servings · 30 mins" (total time), for list cards.
+  String get summaryLabel => '$servings servings · ${prepTime + cookingTime} mins';
 }
