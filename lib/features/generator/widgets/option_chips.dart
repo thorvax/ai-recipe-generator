@@ -30,6 +30,31 @@ class OptionChips extends StatefulWidget {
 class _OptionChipsState extends State<OptionChips> {
   final List<String> _custom = []; // options the user typed themselves
 
+  @override
+  void initState() {
+    super.initState();
+    // A pre-filled selection (e.g. from saved Dietary Preferences) may
+    // include a custom option that isn't in the preset list. Without this,
+    // it would be "selected" but have no chip to show for it.
+    for (final option in widget.selected) {
+      final inPresets =
+          widget.options.any((o) => o.toLowerCase() == option.toLowerCase());
+      if (!inPresets) _custom.add(option);
+    }
+  }
+
+  @override
+  void didUpdateWidget(OptionChips oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // Covers a selection that arrives after the first build (e.g. the
+    // parent screen loads saved preferences via a post-frame callback).
+    for (final option in widget.selected) {
+      final known = widget.options.any((o) => o.toLowerCase() == option.toLowerCase()) ||
+          _custom.any((o) => o.toLowerCase() == option.toLowerCase());
+      if (!known) setState(() => _custom.add(option));
+    }
+  }
+
   void _toggle(String option) {
     final next = Set<String>.from(widget.selected);
     if (next.contains(option)) {
