@@ -59,6 +59,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           password: _passwordCtrl.text,
         );
     if (ok && mounted) {
+      await context.read<AuthProvider>().loadDietaryPreferences();
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
     }
   }
