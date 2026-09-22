@@ -91,7 +91,7 @@ class _SavedRecipesScreenState extends State<SavedRecipesScreen> {
                 )
               : ListView.separated(
                   itemCount: items.length,
-                  separatorBuilder: (_, _) =>
+                  separatorBuilder: (_, __) =>
                       const SizedBox(height: AppSpacing.s12),
                   itemBuilder: (context, i) {
                     final item = items[i];
