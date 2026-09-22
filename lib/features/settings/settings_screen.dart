@@ -10,6 +10,7 @@ import '../../providers/community_provider.dart';
 import '../../providers/recipe_provider.dart';
 import '../../providers/saved_provider.dart';
 import '../../shared/widgets/secondary_button.dart';
+import 'dietary_preferences_screen.dart';
 import 'edit_profile_screen.dart';
 import 'info_screen.dart';
 import 'widgets/settings_tile.dart';
@@ -74,11 +75,7 @@ class SettingsScreen extends StatelessWidget {
             SettingsTile(
               icon: Icons.restaurant_outlined,
               label: 'Dietary Preferences',
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Dietary preferences are coming soon.')),
-                );
-              },
+              onTap: () => _open(context, const DietaryPreferencesScreen()),
             ),
             const SizedBox(height: AppSpacing.s12),
             SettingsTile(
