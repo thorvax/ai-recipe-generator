@@ -64,8 +64,29 @@ class AuthProvider extends ChangeNotifier {
 
   Future<bool> updateName(String name) => _run(() => _service.updateName(name));
 
+  List<String> _dietaryNeeds = [];
+  List<String> get dietaryNeeds => _dietaryNeeds;
+
+  /// Loads the saved dietary preferences (call once after login).
+  Future<void> loadDietaryPreferences() async {
+    _dietaryNeeds = await _service.getDietaryPreferences();
+    notifyListeners();
+  }
+
+  Future<bool> updateDietaryPreferences(List<String> needs) async {
+    final ok = await _run(() => _service.updateDietaryPreferences(needs));
+    if (ok) {
+      _dietaryNeeds = needs;
+      notifyListeners();
+    }
+    return ok;
+  }
+
   Future<bool> sendPasswordReset(String email) =>
       _run(() => _service.sendPasswordReset(email));
 
-  Future<void> signOut() => _service.signOut();
+  Future<void> signOut() {
+    _dietaryNeeds = [];
+    return _service.signOut();
+  }
 }
