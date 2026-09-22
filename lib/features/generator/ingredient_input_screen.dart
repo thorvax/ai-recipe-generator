@@ -41,6 +41,23 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
   Set<String> _cuisine = {};
   Set<String> _diet = {};
   int _servings = 2;
+  bool _prefilledDiet = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-fill dietary needs from Settings > Dietary Preferences, once.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _prefilledDiet) return;
+      final saved = context.read<AuthProvider>().dietaryNeeds;
+      if (saved.isNotEmpty) {
+        setState(() {
+          _diet = Set.of(saved);
+          _prefilledDiet = true;
+        });
+      }
+    });
+  }
 
   @override
   void dispose() {
