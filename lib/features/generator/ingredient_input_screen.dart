@@ -41,21 +41,30 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
   Set<String> _cuisine = {};
   Set<String> _diet = {};
   int _servings = 2;
-  bool _prefilledDiet = false;
 
-  @override
-  void initState() {
-    super.initState();
-    // Pre-fill dietary needs from Settings > Dietary Preferences, once.
+  // Tracks the last set of default dietary needs applied from Settings, so
+  // we can apply just the *change* (added/removed) instead of overwriting
+  // whatever the user has currently picked for this one recipe.
+  Set<String> _lastAppliedDietDefaults = {};
+
+  /// Call every build with the latest saved defaults. Runs the diff and,
+  /// if anything changed, applies it after this build finishes.
+  void _syncDietaryDefaults(List<String> saved) {
+    final defaults = Set<String>.from(saved);
+    if (setEquals(defaults, _lastAppliedDietDefaults)) return;
+
+    final added = defaults.difference(_lastAppliedDietDefaults);
+    final removed = _lastAppliedDietDefaults.difference(defaults);
+    _lastAppliedDietDefaults = defaults;
+    if (added.isEmpty && removed.isEmpty) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || _prefilledDiet) return;
-      final saved = context.read<AuthProvider>().dietaryNeeds;
-      if (saved.isNotEmpty) {
-        setState(() {
-          _diet = Set.of(saved);
-          _prefilledDiet = true;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _diet
+          ..addAll(added)
+          ..removeAll(removed);
+      });
     });
   }
 
@@ -111,8 +120,10 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final fullName =
-        context.read<AuthProvider>().currentUser?.displayName?.trim() ?? '';
+    final auth = context.watch<AuthProvider>();
+    _syncDietaryDefaults(auth.dietaryNeeds);
+
+    final fullName = auth.currentUser?.displayName?.trim() ?? '';
     final firstName = fullName.isEmpty ? 'there' : fullName.split(' ').first;
 
     return SafeArea(
