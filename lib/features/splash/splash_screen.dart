@@ -21,9 +21,12 @@ class _SplashScreenState extends State<SplashScreen> {
     Future.delayed(const Duration(seconds: 2), _goNext);
   }
 
-  void _goNext() {
+  Future<void> _goNext() async {
     if (!mounted) return;
-    final loggedIn = context.read<AuthProvider>().isLoggedIn;
+    final auth = context.read<AuthProvider>();
+    final loggedIn = auth.isLoggedIn;
+    if (loggedIn) await auth.loadDietaryPreferences();
+    if (!mounted) return;
     Navigator.pushReplacementNamed(
       context,
       loggedIn ? AppRoutes.home : AppRoutes.login,
