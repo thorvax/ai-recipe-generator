@@ -66,6 +66,39 @@ class AuthService {
     }
   }
 
+  /// Reads the user's saved default dietary needs (users/{uid}.dietary_needs).
+  Future<List<String>> getDietaryPreferences() async {
+    final user = _auth.currentUser;
+    if (user == null) return [];
+    try {
+      final doc = await _db
+          .collection('users')
+          .doc(user.uid)
+          .get()
+          .timeout(const Duration(seconds: 8));
+      final raw = doc.data()?['dietary_needs'];
+      if (raw is List) return raw.map((e) => e.toString()).toList();
+      return [];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// Saves the user's default dietary needs, used to pre-fill new requests.
+  Future<void> updateDietaryPreferences(List<String> needs) async {
+    final user = _auth.currentUser;
+    if (user == null) throw AuthException('You are not logged in.');
+    try {
+      await _db.collection('users').doc(user.uid).set({
+        'user_id': user.uid,
+        'email': user.email,
+        'dietary_needs': needs,
+      }, SetOptions(merge: true)).timeout(const Duration(seconds: 8));
+    } catch (_) {
+      throw AuthException('Could not save your preferences. Try again.');
+    }
+  }
+
   /// Changes the display name in Firebase Auth and in users/{uid}.
   Future<void> updateName(String name) async {
     final user = _auth.currentUser;
