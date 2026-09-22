@@ -47,6 +47,8 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordCtrl.text,
         );
     if (ok && mounted) {
+      await context.read<AuthProvider>().loadDietaryPreferences();
+      if (!mounted) return;
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
     }
   }

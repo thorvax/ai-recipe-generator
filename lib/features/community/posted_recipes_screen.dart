@@ -35,7 +35,7 @@ class PostedRecipesScreen extends StatelessWidget {
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: AppSpacing.s16),
       itemCount: community.posts.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s12),
+      separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s12),
       itemBuilder: (context, i) {
         final post = community.posts[i];
         return PostCard(
