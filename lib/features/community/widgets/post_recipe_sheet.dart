@@ -84,6 +84,7 @@ class _PostRecipeSheetState extends State<_PostRecipeSheet> {
                 controller: _ctrl,
                 maxLines: 3,
                 textInputAction: TextInputAction.newline,
+              keyboardType:TextInputType.multiline ,
               ),
               const SizedBox(height: AppSpacing.s24),
               PrimaryButton(label: 'Post Recipe', onPressed: _submit),
