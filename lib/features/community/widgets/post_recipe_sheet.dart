@@ -52,10 +52,15 @@ class _PostRecipeSheetState extends State<_PostRecipeSheet> {
     return SafeArea(
       child: Padding(
         // Lifts the sheet above the keyboard.
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(
-            AppSpacing.s24, AppSpacing.s12, AppSpacing.s24, AppSpacing.s24,
+            AppSpacing.s24,
+            AppSpacing.s12,
+            AppSpacing.s24,
+            AppSpacing.s24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -76,7 +81,9 @@ class _PostRecipeSheetState extends State<_PostRecipeSheet> {
               const SizedBox(height: AppSpacing.s8),
               Text(
                 'Share "${widget.recipeName}" so other cooks can view, rate and comment on it.',
-                style: AppTextStyles.body2.copyWith(color: AppColors.textSecondary),
+                style: AppTextStyles.body2.copyWith(
+                  color: AppColors.textSecondary,
+                ),
               ),
               const SizedBox(height: AppSpacing.s16),
               AppTextField(
@@ -84,7 +91,7 @@ class _PostRecipeSheetState extends State<_PostRecipeSheet> {
                 controller: _ctrl,
                 maxLines: 3,
                 textInputAction: TextInputAction.newline,
-              keyboardType:TextInputType.multiline ,
+                keyboardType: TextInputType.multiline,
               ),
               const SizedBox(height: AppSpacing.s24),
               PrimaryButton(label: 'Post Recipe', onPressed: _submit),
