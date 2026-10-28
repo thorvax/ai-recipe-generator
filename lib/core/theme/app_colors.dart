@@ -23,7 +23,4 @@ class AppColors {
   static const Color cardBorder = Color(0xFFEFEDE6);
   static const Color secondaryLight = Color(0xFFFDE9DA); // tag background
   static const Color secondaryDark = Color(0xFFC96F2A); // tag text
-  // static const Color cardBorder = Color(0xFFEFEFEF);
-  // static const Color secondaryLight = Color(0xFFFDEBDD); // orange tag background
-  // static const Color secondaryDark = Color(0xFFD97B2D); // orange tag text
 }
