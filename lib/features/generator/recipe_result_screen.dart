@@ -10,6 +10,7 @@ import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/recipe_content.dart';
 import '../../shared/widgets/secondary_button.dart';
 import '../saved/widgets/category_sheet.dart';
+import 'recipe_editor_screen.dart';
 
 /// Shows the generated recipe with Save / Start a New Recipe buttons.
 class RecipeResultScreen extends StatefulWidget {
@@ -38,6 +39,21 @@ class _RecipeResultScreenState extends State<RecipeResultScreen> {
     );
   }
 
+  Future<void> _edit(Recipe recipe) async {
+    final edited = await Navigator.push<Recipe>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeEditorScreen(
+          initial: recipe,
+          title: 'Edit Recipe',
+          saveLabel: 'Save Changes',
+        ),
+      ),
+    );
+    if (edited == null || !mounted) return;
+    context.read<RecipeProvider>().setRecipe(edited);
+  }
+
   @override
   Widget build(BuildContext context) {
     final recipe = context.watch<RecipeProvider>().currentRecipe;
@@ -55,7 +71,16 @@ class _RecipeResultScreenState extends State<RecipeResultScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined),
+            tooltip: 'Edit recipe',
+            onPressed: () => _edit(recipe),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(

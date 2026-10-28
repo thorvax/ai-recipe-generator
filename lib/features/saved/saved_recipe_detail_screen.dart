@@ -3,12 +3,14 @@ import 'package:provider/provider.dart';
 
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/recipe.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
 import '../../providers/saved_provider.dart';
 import '../../shared/widgets/recipe_content.dart';
 import '../../shared/widgets/secondary_button.dart';
 import '../community/widgets/post_recipe_sheet.dart';
+import '../generator/recipe_editor_screen.dart';
 import 'widgets/category_sheet.dart';
 
 /// Full view of a saved recipe, with Remove from Collection.
@@ -33,6 +35,30 @@ class SavedRecipeDetailScreen extends StatelessWidget {
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(error ?? 'Moved to $name')),
+    );
+  }
+
+  Future<void> _edit(BuildContext context) async {
+    final provider = context.read<SavedProvider>();
+    final saved = provider.findById(savedId);
+    if (saved == null) return;
+
+    final edited = await Navigator.push<Recipe>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeEditorScreen(
+          initial: saved.recipe,
+          title: 'Edit Recipe',
+          saveLabel: 'Save Changes',
+        ),
+      ),
+    );
+    if (edited == null || !context.mounted) return;
+
+    final error = await provider.updateRecipeContent(savedId, edited);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Recipe updated')),
     );
   }
 
@@ -116,13 +142,17 @@ class SavedRecipeDetailScreen extends StatelessWidget {
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_horiz),
             onSelected: (value) {
-              if (value == 'category') {
-                _changeCategory(context);
-              } else {
-                _post(context);
+              switch (value) {
+                case 'category':
+                  _changeCategory(context);
+                case 'edit':
+                  _edit(context);
+                default:
+                  _post(context);
               }
             },
             itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('Edit recipe')),
               PopupMenuItem(value: 'category', child: Text('Change category')),
               PopupMenuItem(value: 'post', child: Text('Post to community')),
             ],

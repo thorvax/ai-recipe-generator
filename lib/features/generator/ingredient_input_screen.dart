@@ -10,6 +10,9 @@ import '../../models/generation_request.dart';
 import '../../providers/auth_provider.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../models/recipe.dart';
+import '../../providers/recipe_provider.dart';
+import 'recipe_editor_screen.dart';
 import 'widgets/ingredient_chip_input.dart';
 import 'widgets/option_chips.dart';
 import 'widgets/preference_card.dart';
@@ -109,6 +112,23 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
     );
 
     Navigator.pushNamed(context, AppRoutes.generating, arguments: request);
+  }
+
+  Future<void> _writeOwnRecipe() async {
+    final userId = context.read<AuthProvider>().currentUser?.uid ?? '';
+    final recipe = await Navigator.push<Recipe>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RecipeEditorScreen(
+          initial: Recipe.blank(userId: userId),
+          title: 'Write Your Own Recipe',
+          saveLabel: 'Continue',
+        ),
+      ),
+    );
+    if (recipe == null || !mounted) return;
+    context.read<RecipeProvider>().setRecipe(recipe);
+    Navigator.pushNamed(context, AppRoutes.recipeResult);
   }
 
   void _scrollToTop() {
@@ -226,6 +246,18 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
               label: 'Generate Recipe',
               trailingIcon: Icons.arrow_forward,
               onPressed: _ingredients.isEmpty ? null : _generate,
+            ),
+            Center(
+              child: TextButton(
+                onPressed: _writeOwnRecipe,
+                child: Text(
+                  'Or write your own recipe',
+                  style: AppTextStyles.body2.copyWith(
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
             ),
             Center(
               child: TextButton(
