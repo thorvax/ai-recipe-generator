@@ -19,6 +19,7 @@ class Recipe {
   final String dietaryRestriction; // e.g. "Vegetarian, Gluten-free" or "None"
   final List<RecipeIngredient> ingredients;
   final List<RecipeStep> steps;
+  final String source; // 'ai' or 'manual'
   final DateTime? createdAt;
 
   const Recipe({
@@ -34,6 +35,7 @@ class Recipe {
     required this.dietaryRestriction,
     required this.ingredients,
     required this.steps,
+    this.source = 'ai',
     this.createdAt,
   });
 
@@ -66,6 +68,7 @@ class Recipe {
         for (var i = 0; i < rawSteps.length; i++)
           RecipeStep(stepNumber: i + 1, instruction: rawSteps[i].toString()),
       ],
+      source: 'ai',
     );
   }
 
@@ -81,6 +84,7 @@ class Recipe {
         'dietary_restriction': dietaryRestriction,
         'ingredients': ingredients.map((i) => i.toMap()).toList(),
         'steps': steps.map((s) => s.toMap()).toList(),
+        'source': source,
         'created_at': FieldValue.serverTimestamp(),
       };
 
@@ -103,23 +107,55 @@ class Recipe {
       steps: ((map['steps'] as List?) ?? [])
           .map((e) => RecipeStep.fromMap(Map<String, dynamic>.from(e)))
           .toList(),
+      source: map['source']?.toString() ?? 'ai',
       createdAt: ts is Timestamp ? ts.toDate() : null,
     );
   }
 
-  Recipe copyWith({String? id}) => Recipe(
+  /// An empty recipe to start the "write your own" form from.
+  factory Recipe.blank({required String userId}) => Recipe(
+        userId: userId,
+        name: '',
+        description: '',
+        mealType: 'Any',
+        cuisine: 'Any',
+        servings: 2,
+        prepTime: 0,
+        cookingTime: 0,
+        dietaryRestriction: 'None',
+        ingredients: const [],
+        steps: const [],
+        source: 'manual',
+      );
+
+  Recipe copyWith({
+    String? id,
+    String? name,
+    String? description,
+    String? mealType,
+    String? cuisine,
+    int? servings,
+    int? prepTime,
+    int? cookingTime,
+    String? dietaryRestriction,
+    List<RecipeIngredient>? ingredients,
+    List<RecipeStep>? steps,
+    String? source,
+  }) =>
+      Recipe(
         id: id ?? this.id,
         userId: userId,
-        name: name,
-        description: description,
-        mealType: mealType,
-        cuisine: cuisine,
-        servings: servings,
-        prepTime: prepTime,
-        cookingTime: cookingTime,
-        dietaryRestriction: dietaryRestriction,
-        ingredients: ingredients,
-        steps: steps,
+        name: name ?? this.name,
+        description: description ?? this.description,
+        mealType: mealType ?? this.mealType,
+        cuisine: cuisine ?? this.cuisine,
+        servings: servings ?? this.servings,
+        prepTime: prepTime ?? this.prepTime,
+        cookingTime: cookingTime ?? this.cookingTime,
+        dietaryRestriction: dietaryRestriction ?? this.dietaryRestriction,
+        ingredients: ingredients ?? this.ingredients,
+        steps: steps ?? this.steps,
+        source: source ?? this.source,
         createdAt: createdAt,
       );
 
