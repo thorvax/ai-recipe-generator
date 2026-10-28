@@ -25,6 +25,14 @@ class RecipeProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets the current recipe directly, without calling Gemini. Used for a
+  /// manually written recipe, and to apply edits made on the Result screen.
+  void setRecipe(Recipe recipe) {
+    _currentRecipe = recipe;
+    _errorMessage = null;
+    notifyListeners();
+  }
+
   /// Generates a recipe, saves the request + recipe to Firestore,
   /// and returns true on success.
   Future<bool> generate({

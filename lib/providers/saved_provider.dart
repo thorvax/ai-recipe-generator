@@ -124,6 +124,9 @@ class SavedProvider extends ChangeNotifier {
         ));
   }
 
+  Future<String?> updateRecipeContent(String savedId, Recipe recipe) =>
+      _run(() => _service.updateRecipeContent(savedId: savedId, recipe: recipe));
+
   Future<String?> remove(String savedId) =>
       _run(() => _service.removeSaved(savedId));
 

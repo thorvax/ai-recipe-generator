@@ -88,6 +88,16 @@ class SavedRecipeService {
     }).timeout(timeout);
   }
 
+  /// Overwrites the saved recipe's content snapshot after editing.
+  Future<void> updateRecipeContent({
+    required String savedId,
+    required Recipe recipe,
+  }) async {
+    await _db.collection('saved_recipes').doc(savedId).update({
+      'recipe': recipe.toMap(),
+    }).timeout(timeout);
+  }
+
   Future<void> removeSaved(String savedId) {
     return _db.collection('saved_recipes').doc(savedId).delete().timeout(timeout);
   }
