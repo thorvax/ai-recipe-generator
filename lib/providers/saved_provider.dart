@@ -105,12 +105,16 @@ class SavedProvider extends ChangeNotifier {
   }
 
   /// Each of these returns an error message, or null when it worked.
+  /// [userId] is who the recipe gets saved under — defaults to the
+  /// recipe's own author (generating/writing it yourself). Pass the
+  /// current viewer's id explicitly when saving someone else's post.
   Future<String?> save({
     required Recipe recipe,
     required String categoryName,
+    String? userId,
   }) {
     return _run(() => _service.saveRecipe(
-          userId: recipe.userId,
+          userId: userId ?? recipe.userId,
           recipe: recipe,
           categoryName: categoryName,
         ));

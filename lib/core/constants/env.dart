@@ -7,6 +7,7 @@ class Env {
   Env._();
 
   static const geminiApiKey = String.fromEnvironment('GEMINI_API_KEY');
+  static const String googleServerClientId = '880175474616-kf2roc4i8ettq8ai9vcku90jdrq6631p.apps.googleusercontent.com';
 
   /// Model id. Flash-Lite models have the most generous free daily limit.
   /// If you get a "model not found" error, check the current model list in

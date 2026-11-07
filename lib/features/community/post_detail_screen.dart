@@ -9,10 +9,12 @@ import '../../models/posted_recipe.dart';
 import '../../models/rating.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
+import '../../providers/saved_provider.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/recipe_content.dart';
+import '../saved/widgets/category_sheet.dart';
 import 'widgets/comment_tile.dart';
 import 'widgets/poster_header.dart';
 import 'widgets/star_rating.dart';
@@ -93,6 +95,21 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         .read<CommunityProvider>()
         .deleteComment(widget.postId, comment.id);
     if (error != null && mounted) _snack(error);
+  }
+
+  Future<void> _saveToCollection(PostedRecipe post, String uid) async {
+    final category = await showCategorySheet(context);
+    if (category == null || !mounted) return;
+
+    final error = await context.read<SavedProvider>().save(
+          recipe: post.recipe,
+          categoryName: category,
+          userId: uid,
+        );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(error ?? 'Saved to $category')),
+    );
   }
 
   Future<void> _deletePost() async {
@@ -242,12 +259,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
 
     final isOwner = post.userId == uid;
+    final isSaved = context.watch<SavedProvider>().isSaved(post.recipe.id);
 
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         title: Text('Recipe', style: AppTextStyles.body1.copyWith(fontWeight: FontWeight.w600)),
         actions: [
+          if (!isOwner)
+            IconButton(
+              icon: Icon(isSaved ? Icons.bookmark : Icons.bookmark_border),
+              tooltip: isSaved ? 'Saved to your collection' : 'Save recipe',
+              onPressed: isSaved ? null : () => _saveToCollection(post, uid),
+            ),
           if (isOwner)
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_horiz),
