@@ -12,6 +12,10 @@ class AuthProvider extends ChangeNotifier {
   String? _errorMessage;
 
   bool get isLoading => _isLoading;
+
+  // Separate from _isLoading so only the Google button shows a spinner.
+  bool _isGoogleLoading = false;
+  bool get isGoogleLoading => _isGoogleLoading;
   String? get errorMessage => _errorMessage;
 
   User? get currentUser => _service.currentUser;
@@ -58,6 +62,26 @@ class AuthProvider extends ChangeNotifier {
     required String password,
   }) =>
       _run(() => _service.signUp(name: name, email: email, password: password));
+
+  /// True when signed in. False if cancelled (no error shown) or failed
+  /// (errorMessage is set).
+  Future<bool> signInWithGoogle() async {
+    _isGoogleLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      return await _service.signInWithGoogle();
+    } on AuthException catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (_) {
+      _errorMessage = 'Something went wrong. Please try again.';
+      return false;
+    } finally {
+      _isGoogleLoading = false;
+      notifyListeners();
+    }
+  }
 
   Future<bool> signIn({required String email, required String password}) =>
       _run(() => _service.signIn(email: email, password: password));

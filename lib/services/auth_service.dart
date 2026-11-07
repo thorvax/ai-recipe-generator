@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
+import '../core/constants/env.dart';
 import '../models/app_user.dart';
 
 /// A friendly error that the UI can show directly.
@@ -117,7 +120,92 @@ class AuthService {
     }
   }
 
-  Future<void> signOut() => _auth.signOut();
+  // ---------- Google sign-in ----------
+
+  bool _googleInitialized = false;
+
+  /// google_sign_in v7 must be initialized exactly once before use.
+  Future<void> _ensureGoogleInitialized() async {
+    if (_googleInitialized) return;
+    await GoogleSignIn.instance.initialize(
+      serverClientId: Env.googleServerClientId,
+    );
+    _googleInitialized = true;
+  }
+
+  /// Returns true when signed in, false if the user closed the Google
+  /// account picker (not an error). Throws [AuthException] on real failures.
+  Future<bool> signInWithGoogle() async {
+    try {
+      await _ensureGoogleInitialized();
+      final googleUser = await GoogleSignIn.instance.authenticate();
+
+      final idToken = googleUser.authentication.idToken;
+      if (idToken == null) {
+        throw AuthException('Google sign-in failed. Please try again.');
+      }
+
+      final credential = GoogleAuthProvider.credential(idToken: idToken);
+      final result = await _auth.signInWithCredential(credential);
+      final user = result.user;
+      if (user != null) await _ensureUserDocument(user);
+      return true;
+    } on GoogleSignInException catch (e) {
+      debugPrint('Google sign-in error: ${e.code} ${e.description}');
+      switch (e.code) {
+        case GoogleSignInExceptionCode.canceled:
+          return false;
+        case GoogleSignInExceptionCode.interrupted:
+          throw AuthException('Sign-in was interrupted. Please try again.');
+        case GoogleSignInExceptionCode.uiUnavailable:
+          throw AuthException('Google sign-in is not available on this device.');
+        case GoogleSignInExceptionCode.clientConfigurationError:
+        case GoogleSignInExceptionCode.providerConfigurationError:
+          throw AuthException('Google sign-in is not set up correctly.');
+        default:
+          throw AuthException('Google sign-in failed. Please try again.');
+      }
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyMessage(e.code));
+    }
+  }
+
+  /// First-time Google users have no users/{uid} document yet (sign up
+  /// creates it for email accounts). Best-effort: a failure here must not
+  /// block the login itself.
+  Future<void> _ensureUserDocument(User user) async {
+    try {
+      final ref = _db.collection('users').doc(user.uid);
+      final snap = await ref.get().timeout(const Duration(seconds: 8));
+      if (snap.exists) return;
+
+      final email = user.email ?? '';
+      final name = (user.displayName?.trim().isNotEmpty ?? false)
+          ? user.displayName!.trim()
+          : (email.contains('@') ? email.split('@').first : 'Cook');
+
+      final appUser = AppUser(uid: user.uid, name: name, email: email);
+      await ref.set(appUser.toMap()).timeout(const Duration(seconds: 8));
+    } catch (e) {
+      debugPrint('ensureUserDocument failed: $e');
+    }
+  }
+
+  Future<void> signOut() async {
+    // Also sign out of Google so the account picker shows next time.
+    final usedGoogle = _auth.currentUser?.providerData
+            .any((p) => p.providerId == 'google.com') ??
+        false;
+    if (usedGoogle) {
+      try {
+        await _ensureGoogleInitialized();
+        await GoogleSignIn.instance.signOut();
+      } catch (e) {
+        debugPrint('Google signOut failed: $e');
+      }
+    }
+    await _auth.signOut();
+  }
 
   String _friendlyMessage(String code) {
     switch (code) {
