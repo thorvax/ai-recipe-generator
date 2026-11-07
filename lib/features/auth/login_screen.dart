@@ -53,6 +53,16 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  Future<void> _googleSignIn() async {
+    final auth = context.read<AuthProvider>();
+    final ok = await auth.signInWithGoogle();
+    if (ok && mounted) {
+      await auth.loadDietaryPreferences();
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final auth = context.watch<AuthProvider>();
@@ -113,7 +123,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 PrimaryButton(
                   label: 'Log In',
                   isLoading: auth.isLoading,
-                  onPressed: _submit,
+                  onPressed: auth.isGoogleLoading ? null : _submit,
                 ),
                 const SizedBox(height: AppSpacing.s16),
                 Center(
@@ -126,13 +136,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: AppSpacing.s16),
                 SecondaryButton(
                   label: 'Continue with Google',
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Google sign-in is coming soon.'),
-                      ),
-                    );
-                  },
+                  isLoading: auth.isGoogleLoading,
+                  onPressed: auth.isLoading ? null : _googleSignIn,
                 ),
                 const SizedBox(height: AppSpacing.s24),
                 Row(
