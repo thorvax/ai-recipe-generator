@@ -23,4 +23,10 @@ class AppColors {
   static const Color cardBorder = Color(0xFFEFEDE6);
   static const Color secondaryLight = Color(0xFFFDE9DA); // tag background
   static const Color secondaryDark = Color(0xFFC96F2A); // tag text
+
+  // Photos (dark scrims so white text stays readable on images)
+  static const Color black = Color(0xFF000000);
+  static const Color scrimStart = Color(0x59000000); // 35% black
+  static const Color scrimEnd = Color(0xCC000000); // 80% black
+  static const Color heart = Color(0xFFE5484D); // liked comment
 }

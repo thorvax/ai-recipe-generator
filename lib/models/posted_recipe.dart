@@ -17,6 +17,10 @@ class PostedRecipe {
   final Recipe recipe;
   final DateTime? postedAt;
 
+  /// Optional photo: a compressed base64 JPEG (photo_b64). Null = the
+  /// default recipe image is shown instead.
+  final String? photoBase64;
+
   const PostedRecipe({
     required this.id,
     required this.userId,
@@ -25,6 +29,7 @@ class PostedRecipe {
     required this.caption,
     required this.recipe,
     this.postedAt,
+    this.photoBase64,
   });
 
   Map<String, dynamic> toMap() => {
@@ -34,12 +39,14 @@ class PostedRecipe {
         'recipe_id': recipeId,
         'caption': caption,
         'recipe': recipe.toMap(),
+        if (photoBase64 != null) 'photo_b64': photoBase64,
         'posted_at': FieldValue.serverTimestamp(),
       };
 
   factory PostedRecipe.fromMap(Map<String, dynamic> map, {required String id}) {
     final ts = map['posted_at'];
     final recipeId = map['recipe_id']?.toString() ?? '';
+    final photo = map['photo_b64'];
     return PostedRecipe(
       id: id,
       userId: map['user_id']?.toString() ?? '',
@@ -51,6 +58,7 @@ class PostedRecipe {
         id: recipeId,
       ),
       postedAt: ts is Timestamp ? ts.toDate() : null,
+      photoBase64: (photo is String && photo.isNotEmpty) ? photo : null,
     );
   }
 }

@@ -25,11 +25,11 @@ class _SplashScreenState extends State<SplashScreen> {
     if (!mounted) return;
     final auth = context.read<AuthProvider>();
     final loggedIn = auth.isLoggedIn;
-    if (loggedIn) await auth.loadDietaryPreferences();
+    if (loggedIn) await auth.afterLogin();
     if (!mounted) return;
     Navigator.pushReplacementNamed(
       context,
-      loggedIn ? AppRoutes.home : AppRoutes.login,
+      loggedIn ? auth.homeRoute : AppRoutes.login,
     );
   }
 
@@ -59,9 +59,10 @@ class _SplashScreenState extends State<SplashScreen> {
               ),
               child: Padding(
                 padding: const EdgeInsets.all(AppSpacing.s20),
+                
                 child: Image.asset(
                   'lib/assets/pot-icon.png',
-                  fit: BoxFit.contain,
+                  fit: BoxFit.fill,
                 ),
               ),
             ),

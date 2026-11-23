@@ -1,0 +1,170 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // NEW: true when the login's email is verified (email accounts after
+    // clicking the link; Google accounts always). Required for anything
+    // other users see: posts, ratings and comments.
+    function emailVerified() {
+      return request.auth != null
+        && request.auth.token.email_verified == true;
+    }
+
+
+
+    match /users/{userId}/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    match /generation_requests/{id} {
+      allow create: if request.auth != null
+                    && request.resource.data.user_id == request.auth.uid;
+      allow read: if request.auth != null
+                  && resource.data.user_id == request.auth.uid;
+    }
+
+    match /recipes/{id} {
+      allow create: if request.auth != null
+                    && request.resource.data.user_id == request.auth.uid;
+      allow read, update, delete: if request.auth != null
+                                  && resource.data.user_id == request.auth.uid;
+    }
+
+
+    match /categories/{id} {
+      allow create: if request.auth != null
+                    && request.resource.data.user_id == request.auth.uid;
+      allow read, update, delete: if request.auth != null
+                                  && resource.data.user_id == request.auth.uid;
+    }
+
+    match /saved_recipes/{id} {
+      allow create: if request.auth != null
+                    && request.resource.data.user_id == request.auth.uid;
+      allow read, update, delete: if request.auth != null
+                                  && resource.data.user_id == request.auth.uid;
+    }
+
+
+    // NEW: unique usernames. usernames/{username} = { user_id, created_at }.
+    // The document id IS the username, so two accounts can never share one:
+    // creating a doc that already exists counts as an update, which is denied.
+    // Holds no email or other private data.
+    match /usernames/{username} {
+      // Sign-up checks "is this name free?" before the account exists.
+      // One name at a time only: nobody can list every username.
+      allow get: if true;
+      allow list: if false;
+      // Claim: only for yourself, only a valid name, and only together with
+      // setting users/{uid}.username to the same name (same transaction).
+      allow create: if request.auth != null
+        && username.matches('^[a-z0-9._]{3,20}$')
+        && request.resource.data.user_id == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.username == username;
+      // Free your old name when changing it (users/{uid}.username moved on).
+      allow delete: if request.auth != null
+        && resource.data.user_id == request.auth.uid
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('username', '') != username;
+      allow update: if false;
+    }
+
+    // NEW: public name + avatar, readable by any signed-in user.
+    // users/{uid} stays private (rule above is unchanged).
+    match /public_profiles/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null
+        && request.auth.uid == uid
+        && request.resource.data.user_id == uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() <= 80
+        && (request.resource.data.get('avatar_b64', null) == null
+            || (request.resource.data.avatar_b64 is string
+                && request.resource.data.avatar_b64.size() <= 60000))
+        && (request.resource.data.get('photo_url', null) == null
+            || (request.resource.data.photo_url is string
+                && request.resource.data.photo_url.size() <= 2048));
+      allow delete: if false;
+    }
+
+
+    match /posted_recipes/{postId} {
+      allow read: if request.auth != null;
+      allow create: if emailVerified()
+                    && request.resource.data.user_id == request.auth.uid
+                    // NEW: optional recipe photo (base64 JPEG)
+                    && (request.resource.data.get('photo_b64', null) == null
+                        || (request.resource.data.photo_b64 is string
+                            && request.resource.data.photo_b64.size() <= 400000));
+      allow delete: if request.auth != null
+                    && resource.data.user_id == request.auth.uid;
+
+      match /ratings/{userId} {
+        allow read: if request.auth != null;
+        allow create: if emailVerified()
+          && userId == request.auth.uid
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.rating_value is int
+          && request.resource.data.rating_value >= 1
+          && request.resource.data.rating_value <= 5
+          && get(/databases/$(database)/documents/posted_recipes/$(postId)).data.user_id != request.auth.uid;
+      }
+
+      match /comments/{commentId} {
+        // NEW: photo_b64 is null or a base64 string within the limit.
+        function validCommentPhoto() {
+          return request.resource.data.get('photo_b64', null) == null
+            || (request.resource.data.photo_b64 is string
+                && request.resource.data.photo_b64.size() <= 400000);
+        }
+
+        // NEW: a like/unlike may only add or remove your own uid.
+        function onlyOwnLikeChanged() {
+          let before = resource.data.get('liked_by', []).toSet();
+          let afterList = request.resource.data.liked_by;
+          let after = afterList.toSet();
+          return afterList.size() == after.size()   // no duplicates
+            && after.difference(before).union(before.difference(after))
+                 .hasOnly([request.auth.uid]);
+        }
+
+        allow read: if request.auth != null;
+        allow create: if emailVerified()
+          && request.resource.data.user_id == request.auth.uid
+          && request.resource.data.comment_text.size() <= 500
+          // NEW: text, photo, or both, but never empty
+          && (request.resource.data.comment_text.size() > 0
+              || request.resource.data.get('photo_b64', null) != null)
+          && validCommentPhoto()
+          // NEW: replies point at a top-level comment id (null = top-level)
+          && (request.resource.data.get('parent_id', null) == null
+              || request.resource.data.parent_id is string)
+          && (request.resource.data.get('reply_to_user_name', null) == null
+              || (request.resource.data.reply_to_user_name is string
+                  && request.resource.data.reply_to_user_name.size() <= 80))
+          // NEW: new comments start undeleted with no likes
+          && request.resource.data.get('deleted', false) == false
+          && request.resource.data.get('liked_by', []).size() == 0;
+        // NEW: author soft-delete (deleted / comment_text / photo_b64 only),
+        // or any signed-in user liking/unliking (liked_by only, own uid).
+        allow update: if request.auth != null && (
+          (resource.data.user_id == request.auth.uid
+            && request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['deleted', 'comment_text', 'photo_b64'])
+            && request.resource.data.get('deleted', false) is bool
+            && request.resource.data.comment_text is string
+            && request.resource.data.comment_text.size() <= 500
+            && validCommentPhoto())
+          ||
+          (request.resource.data.diff(resource.data).affectedKeys()
+                 .hasOnly(['liked_by'])
+            && request.resource.data.liked_by is list
+            && onlyOwnLikeChanged())
+        );
+        allow delete: if request.auth != null
+                      && resource.data.user_id == request.auth.uid;
+      }
+    }
+
+
+  }
+}

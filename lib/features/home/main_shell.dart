@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
+import '../../providers/profile_provider.dart';
 import '../../providers/saved_provider.dart';
 import '../../shared/widgets/app_bottom_nav.dart';
 import '../community/posted_recipes_screen.dart';
@@ -26,10 +27,17 @@ class _MainShellState extends State<MainShell> {
     super.initState();
     // Start listening to this user's saved recipes and the community feed.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      final uid = context.read<AuthProvider>().currentUser?.uid;
+      final auth = context.read<AuthProvider>();
+      final uid = auth.currentUser?.uid;
       if (uid != null) {
         context.read<SavedProvider>().listen(uid);
         context.read<CommunityProvider>().listen(uid);
+        // Creates the public profile for older accounts (lazy backfill).
+        context.read<ProfileProvider>().ensureMine(
+              uid: uid,
+              name: auth.displayName,
+              googlePhotoUrl: auth.googlePhotoUrl,
+            );
       }
     });
   }

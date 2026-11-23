@@ -50,6 +50,17 @@ class InfoScreen extends StatelessWidget {
                 'other signed-in users, together with your name.',
           ),
           (
+            'Photos',
+            'Your profile picture, and any photos you add to posted recipes '
+                'or comments, are compressed and stored in our database. '
+                'Other signed-in users can see them. If you sign in with '
+                'Google and have not set your own picture, your Google '
+                'profile photo is shown instead. Removing your profile '
+                'picture, deleting a post, or deleting a comment removes '
+                'that photo. Only share photos you are comfortable making '
+                'visible to other users.',
+          ),
+          (
             'AI-generated recipes',
             'The ingredients and notes you type are sent to Google\'s Gemini '
                 'API to create recipes. Please do not enter personal '

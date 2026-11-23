@@ -7,12 +7,16 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
+import '../../providers/profile_provider.dart';
 import '../../providers/recipe_provider.dart';
 import '../../providers/saved_provider.dart';
+import '../../services/media_service.dart';
 import '../../shared/widgets/secondary_button.dart';
+import '../../shared/widgets/user_avatar.dart';
 import 'dietary_preferences_screen.dart';
 import 'edit_profile_screen.dart';
 import 'info_screen.dart';
+import 'widgets/avatar_picker_sheet.dart';
 import 'widgets/settings_tile.dart';
 
 /// Profile tab: avatar, name, email and the settings list.
@@ -29,10 +33,96 @@ class SettingsScreen extends StatelessWidget {
     context.read<SavedProvider>().stop();
     context.read<CommunityProvider>().stop();
     context.read<RecipeProvider>().clear();
+    context.read<ProfileProvider>().clear();
     await auth.signOut();
     if (context.mounted) {
       Navigator.pushNamedAndRemoveUntil(context, AppRoutes.login, (r) => false);
     }
+  }
+
+  Future<void> _editAvatar(BuildContext context) async {
+    final profiles = context.read<ProfileProvider>();
+    if (profiles.isSavingAvatar) return;
+    final messenger = ScaffoldMessenger.of(context);
+
+    final action = await showAvatarPickerSheet(
+      context,
+      canRemove: profiles.myProfile?.hasCustomAvatar ?? false,
+    );
+    if (action == null) return;
+
+    String? error;
+    var changed = false;
+    switch (action) {
+      case AvatarAction.camera:
+      case AvatarAction.gallery:
+        final result = await profiles.changeAvatar(
+          action == AvatarAction.camera
+              ? MediaSource.camera
+              : MediaSource.gallery,
+        );
+        error = result.error;
+        changed = result.changed;
+      case AvatarAction.remove:
+        error = await profiles.removeAvatar();
+        changed = error == null;
+    }
+    if (error != null) {
+      messenger.showSnackBar(SnackBar(content: Text(error)));
+    } else if (changed) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(action == AvatarAction.remove
+              ? 'Profile photo removed'
+              : 'Profile photo updated'),
+        ),
+      );
+    }
+  }
+
+  Widget _avatar(BuildContext context, String? uid, String name) {
+    final saving = context.select<ProfileProvider, bool>((p) => p.isSavingAvatar);
+    return Semantics(
+      button: true,
+      label: 'Change profile photo',
+      child: GestureDetector(
+        onTap: () => _editAvatar(context),
+        child: SizedBox(
+          width: 72,
+          height: 72,
+          child: Stack(
+            children: [
+              UserAvatar(uid: uid, name: name, size: 72, iconFallback: true),
+              if (saving)
+                const Positioned.fill(
+                  child: CircularProgressIndicator(
+                    strokeWidth: 3,
+                    color: AppColors.secondary,
+                  ),
+                ),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Container(
+                  width: 24,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: AppColors.secondary,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.background, width: 2),
+                  ),
+                  child: const Icon(
+                    Icons.photo_camera,
+                    size: 12,
+                    color: AppColors.white,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -45,18 +135,10 @@ class SettingsScreen extends StatelessWidget {
         padding: const EdgeInsets.all(AppSpacing.s24),
         child: Column(
           children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: const BoxDecoration(
-                color: AppColors.primary,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.person, size: 40, color: AppColors.white),
-            ),
+            _avatar(context, auth.currentUser?.uid, auth.displayName),
             const SizedBox(height: AppSpacing.s16),
             Text(
-              auth.displayName,
+              '@${auth.displayName}',
               textAlign: TextAlign.center,
               style: AppTextStyles.heading1,
             ),

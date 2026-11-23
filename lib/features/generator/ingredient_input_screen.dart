@@ -10,6 +10,7 @@ import '../../models/generation_request.dart';
 import '../../providers/auth_provider.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/user_avatar.dart';
 import '../../models/recipe.dart';
 import '../../providers/recipe_provider.dart';
 import 'recipe_editor_screen.dart';
@@ -158,14 +159,11 @@ class _IngredientInputScreenState extends State<IngredientInputScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Hi, $firstName', style: AppTextStyles.body1),
-                Container(
-                  width: 44,
-                  height: 44,
-                  decoration: const BoxDecoration(
-                    color: AppColors.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.person, color: AppColors.white),
+                UserAvatar(
+                  uid: auth.currentUser?.uid,
+                  name: auth.displayName,
+                  size: 44,
+                  iconFallback: true,
                 ),
               ],
             ),

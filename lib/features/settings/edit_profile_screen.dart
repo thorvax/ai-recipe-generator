@@ -4,13 +4,13 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
-import '../../core/utils/validators.dart';
 import '../../providers/auth_provider.dart';
-import '../../shared/widgets/app_text_field.dart';
+import '../../providers/profile_provider.dart';
 import '../../shared/widgets/error_banner.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/username_field.dart';
 
-/// Change your display name. (Email cannot be changed here.)
+/// Change your username (it must be free). Email cannot be changed here.
 class EditProfileScreen extends StatefulWidget {
   const EditProfileScreen({super.key});
 
@@ -20,13 +20,15 @@ class EditProfileScreen extends StatefulWidget {
 
 class _EditProfileScreenState extends State<EditProfileScreen> {
   final _formKey = GlobalKey<FormState>();
-  late final TextEditingController _nameCtrl;
+  late final TextEditingController _usernameCtrl;
+  late final String _currentUsername;
 
   @override
   void initState() {
     super.initState();
     final auth = context.read<AuthProvider>();
-    _nameCtrl = TextEditingController(text: auth.displayName);
+    _currentUsername = auth.displayName;
+    _usernameCtrl = TextEditingController(text: _currentUsername);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) auth.clearError();
     });
@@ -34,16 +36,23 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _usernameCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
     final messenger = ScaffoldMessenger.of(context);
-    final ok = await context.read<AuthProvider>().updateName(_nameCtrl.text);
-    if (ok && mounted) {
-      messenger.showSnackBar(const SnackBar(content: Text('Profile updated')));
+    final profiles = context.read<ProfileProvider>();
+    final typed = _usernameCtrl.text.trim().toLowerCase();
+    if (typed == _currentUsername) {
+      Navigator.pop(context); // nothing changed
+      return;
+    }
+    final saved = await context.read<AuthProvider>().changeUsername(typed);
+    if (saved != null) profiles.onNameChanged(saved);
+    if (saved != null && mounted) {
+      messenger.showSnackBar(const SnackBar(content: Text('Username updated')));
       Navigator.pop(context);
     }
   }
@@ -70,16 +79,19 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                   ErrorBanner(message: auth.errorMessage!),
                   const SizedBox(height: AppSpacing.s16),
                 ],
-                AppTextField(
-                  label: 'Full name',
-                  hint: 'Full name',
-                  controller: _nameCtrl,
+                Text('Username', style: AppTextStyles.body2),
+                const SizedBox(height: AppSpacing.s8),
+                UsernameField(
+                  controller: _usernameCtrl,
+                  currentUsername: _currentUsername,
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _save(),
-                  validator: (v) => Validators.required(v, field: 'Name'),
                 ),
                 const SizedBox(height: AppSpacing.s16),
-                Text('Email', style: AppTextStyles.body2),
+                Text(
+                  "Email (you log in with this; it can't be changed)",
+                  style: AppTextStyles.body2,
+                ),
                 const SizedBox(height: AppSpacing.s8),
                 Container(
                   width: double.infinity,

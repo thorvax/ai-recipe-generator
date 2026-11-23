@@ -21,6 +21,8 @@ dependencies:
   provider: ^6.1.5+1
   flutter_dotenv: ^6.0.1
   google_sign_in: ^7.2.0
+  image_picker: ^1.2.3
+  image: ^4.13.1
 
 
 dev_dependencies:
@@ -50,3 +52,4 @@ flutter:
   uses-material-design: true
   assets:
     - lib/assets/pot-icon.png
+    - lib/assets/default_recipe.jpg

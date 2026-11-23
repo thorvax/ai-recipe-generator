@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -5,6 +7,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 
 import '../core/constants/env.dart';
 import '../models/app_user.dart';
+import 'profile_service.dart';
+import 'username_service.dart';
 
 /// A friendly error that the UI can show directly.
 class AuthException implements Exception {
@@ -20,28 +24,98 @@ class AuthException implements Exception {
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
   final FirebaseFirestore _db = FirebaseFirestore.instance;
+  final ProfileService _profiles = ProfileService();
+  final UsernameService _usernames = UsernameService();
 
   User? get currentUser => _auth.currentUser;
 
+  /// When a verification email was last sent in this app session, or null
+  /// (older accounts that log in were never sent one).
+  static DateTime? lastVerificationSentAt;
+
+  /// Sends the "Verify your email" link (again).
+  Future<void> sendVerificationEmail() async {
+    final user = _auth.currentUser;
+    if (user == null) throw AuthException('You are not logged in.');
+    try {
+      await user.sendEmailVerification();
+      lastVerificationSentAt = DateTime.now();
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyMessage(e.code));
+    }
+  }
+
+  /// Asks Firebase again whether the email is verified (after the user
+  /// tapped the link in their mail app). Also refreshes the login token,
+  /// so the Firestore rules and the recipe server see "verified" right away.
+  Future<bool> checkEmailVerified() async {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    try {
+      await user.reload();
+      final fresh = _auth.currentUser;
+      final verified = fresh?.emailVerified ?? false;
+      if (verified) await fresh!.getIdToken(true);
+      return verified;
+    } on FirebaseAuthException catch (e) {
+      throw AuthException(_friendlyMessage(e.code));
+    }
+  }
+
   Future<void> signUp({
-    required String name,
+    required String username,
     required String email,
     required String password,
   }) async {
+    final chosen = UsernameService.normalize(username);
     try {
+      // Check first, so a taken name doesn't create an account at all.
+      if (!await _usernames.isAvailable(chosen)) {
+        throw UsernameTakenException();
+      }
+
       final cred = await _auth.createUserWithEmailAndPassword(
         email: email.trim(),
         password: password,
       );
       final user = cred.user!;
-      await user.updateDisplayName(name.trim());
+      await user.updateDisplayName(chosen);
+      // "Verify your email" link (best effort: they can resend it from the
+      // Verify Email screen).
+      try {
+        await user.sendEmailVerification();
+        lastVerificationSentAt = DateTime.now();
+      } catch (e) {
+        debugPrint('send verification email failed: $e');
+      }
 
-      final appUser = AppUser(
-        uid: user.uid,
-        name: name.trim(),
-        email: email.trim(),
-      );
+      final appUser = AppUser(uid: user.uid, name: chosen, email: email.trim());
       await _db.collection('users').doc(user.uid).set(appUser.toMap());
+
+      var finalName = chosen;
+      try {
+        finalName = await _usernames.claim(
+          uid: user.uid,
+          email: user.email ?? '',
+          text: chosen,
+        );
+      } catch (e) {
+        // Taken in the last second by someone else: give a close one.
+        debugPrint('claim username failed: $e');
+        finalName = await _usernames.ensure(
+          uid: user.uid,
+          email: user.email ?? '',
+          nameOrEmail: chosen,
+        );
+        await user.updateDisplayName(finalName);
+      }
+
+      // Public name/avatar other users can see (best-effort).
+      await _profiles.ensureSafely(uid: user.uid, name: finalName);
+    } on UsernameTakenException catch (e) {
+      throw AuthException(e.message);
+    } on TimeoutException {
+      throw AuthException(_timeoutMessage);
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e.code));
     }
@@ -102,21 +176,77 @@ class AuthService {
     }
   }
 
-  /// Changes the display name in Firebase Auth and in users/{uid}.
-  Future<void> updateName(String name) async {
+  /// Changes the username (if it's free) everywhere it's stored: the
+  /// usernames collection, users/{uid}, the Auth display name and
+  /// public_profiles/{uid}.name. Returns the saved username.
+  Future<String> changeUsername(String text) async {
     final user = _auth.currentUser;
     if (user == null) throw AuthException('You are not logged in.');
-    final trimmed = name.trim();
+
+    final String username;
     try {
-      await user.updateDisplayName(trimmed);
+      username = await _usernames.claim(
+        uid: user.uid,
+        email: user.email ?? '',
+        text: text,
+      );
+      await user.updateDisplayName(username);
       await user.reload();
-      await _db.collection('users').doc(user.uid).set({
-        'user_id': user.uid,
-        'email': user.email,
-        'name': trimmed,
-      }, SetOptions(merge: true)).timeout(const Duration(seconds: 8));
+    } on UsernameTakenException catch (e) {
+      throw AuthException(e.message);
+    } on TimeoutException {
+      throw AuthException(_timeoutMessage);
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e.code));
+    } on FirebaseException {
+      throw AuthException('Could not save your username. Please try again.');
+    }
+
+    // Other users see this name on posts and comments (best-effort).
+    try {
+      await _profiles.updateName(uid: user.uid, name: username);
+    } catch (e) {
+      debugPrint('public profile name sync failed: $e');
+    }
+    return username;
+  }
+
+  /// Runs after every login and when the app opens already signed in
+  /// (same as the website's syncAccount). Makes sure the account is
+  /// complete, so phone sign-up, email login, Google login and the
+  /// website all end up the same:
+  ///   1. users/{uid} exists
+  ///   2. it has a username (older accounts and first Google logins get one
+  ///      made from their name or email)
+  ///   3. the Auth display name is that username
+  ///   4. public_profiles/{uid} exists with that name (and the Google photo)
+  /// Never throws: a problem here must not block using the app.
+  Future<void> syncAccount() async {
+    final user = _auth.currentUser;
+    if (user == null) return;
+    try {
+      await _ensureUserDocument(user);
+      final username = await _usernames.ensure(
+        uid: user.uid,
+        email: user.email ?? '',
+        nameOrEmail: _nameFor(user),
+      );
+      if (user.displayName != username) {
+        await user.updateDisplayName(username);
+        await user.reload();
+      }
+      // Creates the profile if missing; refreshes the Google photo only
+      // when there's no custom avatar.
+      final profile = await _profiles.ensure(
+        uid: user.uid,
+        name: username,
+        googlePhotoUrl: ProfileService.googlePhotoUrlOf(user),
+      );
+      if (profile.name != username) {
+        await _profiles.updateName(uid: user.uid, name: username);
+      }
+    } catch (e) {
+      debugPrint('syncAccount failed: $e');
     }
   }
 
@@ -146,9 +276,9 @@ class AuthService {
       }
 
       final credential = GoogleAuthProvider.credential(idToken: idToken);
-      final result = await _auth.signInWithCredential(credential);
-      final user = result.user;
-      if (user != null) await _ensureUserDocument(user);
+      // The users document, username and public profile are set up by
+      // syncAccount(), which runs after every login (AuthProvider.afterLogin).
+      await _auth.signInWithCredential(credential);
       return true;
     } on GoogleSignInException catch (e) {
       debugPrint('Google sign-in error: ${e.code} ${e.description}');
@@ -180,15 +310,20 @@ class AuthService {
       if (snap.exists) return;
 
       final email = user.email ?? '';
-      final name = (user.displayName?.trim().isNotEmpty ?? false)
-          ? user.displayName!.trim()
-          : (email.contains('@') ? email.split('@').first : 'Cook');
-
-      final appUser = AppUser(uid: user.uid, name: name, email: email);
+      final appUser =
+          AppUser(uid: user.uid, name: _nameFor(user), email: email);
       await ref.set(appUser.toMap()).timeout(const Duration(seconds: 8));
     } catch (e) {
       debugPrint('ensureUserDocument failed: $e');
     }
+  }
+
+  /// Display name, else the part of the email before "@", else "Cook".
+  static String _nameFor(User user) {
+    final name = user.displayName?.trim() ?? '';
+    if (name.isNotEmpty) return name;
+    final email = user.email ?? '';
+    return email.contains('@') ? email.split('@').first : 'Cook';
   }
 
   Future<void> signOut() async {
@@ -206,6 +341,9 @@ class AuthService {
     }
     await _auth.signOut();
   }
+
+  static const String _timeoutMessage =
+      'Could not reach the server. Check your connection and try again.';
 
   String _friendlyMessage(String code) {
     switch (code) {

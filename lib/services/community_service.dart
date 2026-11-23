@@ -12,16 +12,19 @@ class CommunityService {
 
   static const Duration timeout = Duration(seconds: 8);
 
+  /// Posts in the feed. Kept small because posts can carry a photo.
+  static const int feedLimit = 20;
+
   CollectionReference<Map<String, dynamic>> get _posts =>
       _db.collection('posted_recipes');
 
   // ---------- posts ----------
 
-  /// Newest 50 posts, live.
+  /// Newest [feedLimit] posts, live.
   Stream<List<PostedRecipe>> watchPosts() {
     return _posts
         .orderBy('posted_at', descending: true)
-        .limit(50)
+        .limit(feedLimit)
         .snapshots()
         .map((snap) => snap.docs
             .map((d) => PostedRecipe.fromMap(d.data(), id: d.id))
@@ -35,6 +38,7 @@ class CommunityService {
     required String recipeId,
     required Recipe recipe,
     required String caption,
+    String? photoBase64,
   }) async {
     final docId = '${userId}_$recipeId';
     final ref = _posts.doc(docId);
@@ -49,6 +53,7 @@ class CommunityService {
       recipeId: recipeId,
       caption: caption,
       recipe: recipe,
+      photoBase64: photoBase64,
     );
     await ref.set(post.toMap()).timeout(timeout);
     return true;
@@ -90,10 +95,11 @@ class CommunityService {
 
   // ---------- comments ----------
 
+  CollectionReference<Map<String, dynamic>> _comments(String postId) =>
+      _posts.doc(postId).collection('comments');
+
   Stream<List<Comment>> watchComments(String postId) {
-    return _posts
-        .doc(postId)
-        .collection('comments')
+    return _comments(postId)
         .orderBy('created_at')
         .snapshots()
         .map((snap) => snap.docs
@@ -101,32 +107,61 @@ class CommunityService {
             .toList());
   }
 
+  /// Adds a comment, or a reply when [parentId] is set.
   Future<void> addComment({
     required String postId,
     required String userId,
     required String userName,
     required String text,
+    String? parentId,
+    String? replyToUserName,
+    String? photoBase64,
   }) {
-    final ref = _posts.doc(postId).collection('comments').doc();
+    final ref = _comments(postId).doc();
     final comment = Comment(
       id: ref.id,
       postId: postId,
       userId: userId,
       userName: userName,
       text: text,
+      parentId: parentId,
+      replyToUserName: replyToUserName,
+      photoBase64: photoBase64,
     );
     return ref.set(comment.toMap()).timeout(timeout);
+  }
+
+  /// Keeps the comment as a "deleted" placeholder so its replies stay
+  /// readable. Only the fields the rules allow are changed.
+  Future<void> softDeleteComment({
+    required String postId,
+    required String commentId,
+  }) {
+    return _comments(postId).doc(commentId).update({
+      'deleted': true,
+      'comment_text': '',
+      'photo_b64': FieldValue.delete(),
+    }).timeout(timeout);
   }
 
   Future<void> deleteComment({
     required String postId,
     required String commentId,
   }) {
-    return _posts
-        .doc(postId)
-        .collection('comments')
-        .doc(commentId)
-        .delete()
-        .timeout(timeout);
+    return _comments(postId).doc(commentId).delete().timeout(timeout);
+  }
+
+  /// Adds or removes [userId]'s heart. Only liked_by changes.
+  Future<void> setCommentLike({
+    required String postId,
+    required String commentId,
+    required String userId,
+    required bool liked,
+  }) {
+    return _comments(postId).doc(commentId).update({
+      'liked_by': liked
+          ? FieldValue.arrayUnion([userId])
+          : FieldValue.arrayRemove([userId]),
+    }).timeout(timeout);
   }
 }

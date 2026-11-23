@@ -4,17 +4,20 @@ import 'package:provider/provider.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../core/utils/comment_thread.dart';
 import '../../models/comment.dart';
 import '../../models/posted_recipe.dart';
 import '../../models/rating.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
 import '../../providers/saved_provider.dart';
-import '../../shared/widgets/app_text_field.dart';
+import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/recipe_content.dart';
+import '../../shared/widgets/recipe_image.dart';
 import '../saved/widgets/category_sheet.dart';
+import 'widgets/comment_composer.dart';
 import 'widgets/comment_tile.dart';
 import 'widgets/poster_header.dart';
 import 'widgets/star_rating.dart';
@@ -32,11 +35,15 @@ class PostDetailScreen extends StatefulWidget {
 class _PostDetailScreenState extends State<PostDetailScreen> {
   late final Stream<List<Rating>> _ratingsStream;
   late final Stream<List<Comment>> _commentsStream;
-  final _commentCtrl = TextEditingController();
+  final _composerKey = GlobalKey<CommentComposerState>();
 
   int _pendingRating = 0;
   bool _rating = false;
-  bool _sending = false;
+
+  CommentSort _sort = CommentSort.recent;
+
+  /// Threads the user opened (threads with 2+ replies start collapsed).
+  final Set<String> _expanded = {};
 
   @override
   void initState() {
@@ -44,12 +51,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final community = context.read<CommunityProvider>();
     _ratingsStream = community.ratingsStream(widget.postId);
     _commentsStream = community.commentsStream(widget.postId);
-  }
-
-  @override
-  void dispose() {
-    _commentCtrl.dispose();
-    super.dispose();
   }
 
   void _snack(String text) {
@@ -68,32 +69,56 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _snack(error ?? 'Thanks for rating!');
   }
 
-  Future<void> _sendComment(String uid) async {
-    var text = _commentCtrl.text.trim();
-    if (text.isEmpty) return;
-    if (text.length > 500) text = text.substring(0, 500);
-
+  Future<String?> _sendComment(String uid, CommentDraft draft) {
     final auth = context.read<AuthProvider>();
-    setState(() => _sending = true);
-    final error = await context.read<CommunityProvider>().addComment(
+    return context.read<CommunityProvider>().addComment(
           postId: widget.postId,
           userId: uid,
           userName: auth.displayName,
-          text: text,
+          text: draft.text,
+          parentId: draft.parentId,
+          replyToUserName: draft.replyToUserName,
+          photoBase64: draft.photoBase64,
         );
-    if (!mounted) return;
-    setState(() => _sending = false);
-    if (error == null) {
-      _commentCtrl.clear();
-    } else {
-      _snack(error);
-    }
   }
 
-  Future<void> _deleteComment(Comment comment) async {
+  Future<void> _deleteComment(Comment comment, {required bool hasReplies}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Delete comment?', style: AppTextStyles.heading2),
+        content: Text(
+          hasReplies
+              ? 'Your comment will be removed. Its replies will stay.'
+              : 'Your comment will be removed.',
+          style: AppTextStyles.body2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final error = await context.read<CommunityProvider>().deleteComment(
+          widget.postId,
+          comment,
+          hasReplies: hasReplies,
+        );
+    if (error != null && mounted) _snack(error);
+  }
+
+  Future<void> _toggleLike(Comment comment, String uid) async {
     final error = await context
         .read<CommunityProvider>()
-        .deleteComment(widget.postId, comment.id);
+        .toggleCommentLike(widget.postId, comment, uid);
     if (error != null && mounted) _snack(error);
   }
 
@@ -214,6 +239,105 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  Widget _sortToggle() {
+    return Row(
+      children: [
+        AppChip(
+          label: 'Recent',
+          selected: _sort == CommentSort.recent,
+          onTap: () => setState(() => _sort = CommentSort.recent),
+        ),
+        const SizedBox(width: AppSpacing.s8),
+        AppChip(
+          label: 'Most liked',
+          selected: _sort == CommentSort.mostLiked,
+          onTap: () => setState(() => _sort = CommentSort.mostLiked),
+        ),
+      ],
+    );
+  }
+
+  Widget _tile(
+    Comment c,
+    String uid, {
+    bool isReply = false,
+    bool isTombstone = false,
+    bool hasReplies = false,
+  }) {
+    return CommentTile(
+      key: ValueKey(c.id),
+      comment: c,
+      myUid: uid,
+      isReply: isReply,
+      isTombstone: isTombstone,
+      onReply: () => _composerKey.currentState?.startReply(c),
+      onDelete: () => _deleteComment(c, hasReplies: hasReplies),
+      onToggleLike: () => _toggleLike(c, uid),
+    );
+  }
+
+  Widget _toggleLink(String label, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.r8),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.s8),
+        child: Text(
+          label,
+          style: AppTextStyles.caption.copyWith(
+            color: AppColors.primary,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One thread: the top-level comment, then its replies indented.
+  /// With 2+ replies it starts collapsed, showing one preview reply.
+  Widget _thread(CommentThread thread, String uid) {
+    final replies = thread.replies;
+    final id = thread.parent.id;
+    final collapsible = replies.length > 1;
+    final expanded = !collapsible || _expanded.contains(id);
+    final shown = expanded ? replies : [previewReply(thread, _sort)!];
+    final hidden = replies.length - 1;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _tile(
+          thread.parent,
+          uid,
+          isTombstone: thread.parentGone,
+          hasReplies: replies.isNotEmpty,
+        ),
+        if (replies.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(left: AppSpacing.s40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                for (final r in shown) _tile(r, uid, isReply: true),
+                if (collapsible && !expanded)
+                  _toggleLink(
+                    hidden == 1
+                        ? 'View 1 more reply'
+                        : 'View $hidden more replies',
+                    () => setState(() => _expanded.add(id)),
+                  ),
+                if (collapsible && expanded)
+                  _toggleLink(
+                    'Hide replies',
+                    () => setState(() => _expanded.remove(id)),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
   Widget _commentsList(String uid) {
     return StreamBuilder<List<Comment>>(
       stream: _commentsStream,
@@ -221,21 +345,22 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         if (snapshot.hasError) {
           return Text('Could not load comments.', style: AppTextStyles.body2);
         }
-        final comments = snapshot.data ?? const <Comment>[];
-        if (comments.isEmpty) {
+        final threads = sortThreads(
+          buildThreads(snapshot.data ?? const <Comment>[]),
+          _sort,
+        );
+        if (threads.isEmpty) {
           return Text(
             'No comments yet. Be the first!',
             style: AppTextStyles.body2.copyWith(color: AppColors.textSecondary),
           );
         }
         return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            for (final c in comments)
-              CommentTile(
-                comment: c,
-                isMine: c.userId == uid,
-                onDelete: () => _deleteComment(c),
-              ),
+            _sortToggle(),
+            const SizedBox(height: AppSpacing.s8),
+            for (final t in threads) _thread(t, uid),
           ],
         );
       },
@@ -290,7 +415,23 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              PosterHeader(name: post.posterName, postedAt: post.postedAt),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(AppRadius.r16),
+                child: SizedBox(
+                  height: 220,
+                  width: double.infinity,
+                  child: RecipeImage(
+                    cacheKey: post.id,
+                    base64: post.photoBase64,
+                  ),
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s16),
+              PosterHeader(
+                uid: post.userId,
+                name: post.posterName,
+                postedAt: post.postedAt,
+              ),
               if (post.caption.isNotEmpty) ...[
                 const SizedBox(height: AppSpacing.s12),
                 Text(post.caption, style: AppTextStyles.body1),
@@ -304,23 +445,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               const SizedBox(height: AppSpacing.s24),
               Text('Comments', style: AppTextStyles.heading2),
               const SizedBox(height: AppSpacing.s12),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Expanded(
-                    child: AppTextField(
-                      hint: 'Add a comment...',
-                      controller: _commentCtrl,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (_) => _sendComment(uid),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.s8),
-                  IconButton(
-                    icon: const Icon(Icons.send_rounded, color: AppColors.primary),
-                    onPressed: _sending ? null : () => _sendComment(uid),
-                  ),
-                ],
+              CommentComposer(
+                key: _composerKey,
+                onSend: (draft) => _sendComment(uid, draft),
               ),
               const SizedBox(height: AppSpacing.s16),
               _commentsList(uid),

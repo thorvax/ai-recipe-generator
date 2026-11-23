@@ -47,9 +47,13 @@ class _LoginScreenState extends State<LoginScreen> {
           password: _passwordCtrl.text,
         );
     if (ok && mounted) {
-      await context.read<AuthProvider>().loadDietaryPreferences();
+      await context.read<AuthProvider>().afterLogin();
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        context.read<AuthProvider>().homeRoute,
+        (r) => false,
+      );
     }
   }
 
@@ -57,9 +61,9 @@ class _LoginScreenState extends State<LoginScreen> {
     final auth = context.read<AuthProvider>();
     final ok = await auth.signInWithGoogle();
     if (ok && mounted) {
-      await auth.loadDietaryPreferences();
+      await auth.afterLogin();
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
+      Navigator.pushNamedAndRemoveUntil(context, auth.homeRoute, (r) => false);
     }
   }
 

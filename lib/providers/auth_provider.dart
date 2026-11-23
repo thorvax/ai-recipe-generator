@@ -1,7 +1,9 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
+import '../core/constants/app_routes.dart';
 import '../services/auth_service.dart';
+import '../services/profile_service.dart';
 
 /// Holds auth state for the UI (loading + error message) and
 /// calls AuthService. Screens read this with context.read / context.watch.
@@ -21,7 +23,38 @@ class AuthProvider extends ChangeNotifier {
   User? get currentUser => _service.currentUser;
   bool get isLoggedIn => currentUser != null;
 
-  /// Name shown to other users: display name, else the part before "@".
+  /// Email accounts must tap the link in the verification email before
+  /// using the app. Google accounts are always verified.
+  bool get needsEmailVerification =>
+      currentUser != null && !currentUser!.emailVerified;
+
+  /// Where to go after login: Home, or the Verify Email screen first.
+  String get homeRoute =>
+      needsEmailVerification ? AppRoutes.verifyEmail : AppRoutes.home;
+
+  /// When the verification email was last sent in this session, or null.
+  DateTime? get lastVerificationSentAt => AuthService.lastVerificationSentAt;
+
+  Future<bool> sendVerificationEmail() =>
+      _run(() => _service.sendVerificationEmail());
+
+  /// True once verified. False (with errorMessage set on failures, or a
+  /// "not yet" message) otherwise.
+  Future<bool> checkEmailVerified() async {
+    var verified = false;
+    final ok = await _run(() async {
+      verified = await _service.checkEmailVerified();
+    });
+    if (ok && !verified) {
+      _errorMessage =
+          'Not verified yet. Tap the link in the email first, then try again.';
+      notifyListeners();
+    }
+    return verified;
+  }
+
+  /// Name shown to other users: the username (kept as the display name by
+  /// syncAccount), else the part before "@".
   String get displayName {
     final user = currentUser;
     final name = user?.displayName?.trim() ?? '';
@@ -29,6 +62,9 @@ class AuthProvider extends ChangeNotifier {
     final email = user?.email ?? '';
     return email.contains('@') ? email.split('@').first : 'Cook';
   }
+
+  /// Google profile photo (256 px), or null for email accounts.
+  String? get googlePhotoUrl => ProfileService.googlePhotoUrlOf(currentUser);
 
   void clearError() {
     if (_errorMessage == null) return;
@@ -57,11 +93,24 @@ class AuthProvider extends ChangeNotifier {
   }
 
   Future<bool> signUp({
-    required String name,
+    required String username,
     required String email,
     required String password,
   }) =>
-      _run(() => _service.signUp(name: name, email: email, password: password));
+      _run(() => _service.signUp(
+            username: username,
+            email: email,
+            password: password,
+          ));
+
+  /// Call after every login (and when the app opens signed in), before
+  /// showing Home: completes the account (username, profile) and loads the
+  /// dietary preferences.
+  Future<void> afterLogin() async {
+    await _service.syncAccount();
+    await loadDietaryPreferences();
+    notifyListeners(); // the display name may now be the username
+  }
 
   /// True when signed in. False if cancelled (no error shown) or failed
   /// (errorMessage is set).
@@ -86,7 +135,14 @@ class AuthProvider extends ChangeNotifier {
   Future<bool> signIn({required String email, required String password}) =>
       _run(() => _service.signIn(email: email, password: password));
 
-  Future<bool> updateName(String name) => _run(() => _service.updateName(name));
+  /// Returns the saved username, or null on failure (errorMessage is set).
+  Future<String?> changeUsername(String username) async {
+    String? saved;
+    final ok = await _run(() async {
+      saved = await _service.changeUsername(username);
+    });
+    return ok ? saved : null;
+  }
 
   List<String> _dietaryNeeds = [];
   List<String> get dietaryNeeds => _dietaryNeeds;

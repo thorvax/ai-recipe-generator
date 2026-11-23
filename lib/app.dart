@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'core/constants/app_routes.dart';
 import 'core/theme/app_theme.dart';
+import 'features/auth/verify_email_screen.dart';
 import 'features/auth/forgot_password_screen.dart';
 import 'features/auth/login_screen.dart';
 import 'features/auth/signup_screen.dart';
@@ -25,6 +26,7 @@ class MealMindApp extends StatelessWidget {
         AppRoutes.login: (_) => const LoginScreen(),
         AppRoutes.signup: (_) => const SignUpScreen(),
         AppRoutes.forgotPassword: (_) => const ForgotPasswordScreen(),
+        AppRoutes.verifyEmail: (_) => const VerifyEmailScreen(),
         AppRoutes.home: (_) => const MainShell(),
         AppRoutes.generating: (_) => const GenerationLoadingScreen(),
         AppRoutes.recipeResult: (_) => const RecipeResultScreen(),

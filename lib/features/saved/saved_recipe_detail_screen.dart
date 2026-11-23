@@ -66,11 +66,11 @@ class SavedRecipeDetailScreen extends StatelessWidget {
     final saved = context.read<SavedProvider>().findById(savedId);
     if (saved == null) return;
 
-    final caption = await showPostRecipeSheet(
+    final draft = await showPostRecipeSheet(
       context,
       recipeName: saved.recipe.name,
     );
-    if (caption == null || !context.mounted) return;
+    if (draft == null || !context.mounted) return;
 
     final auth = context.read<AuthProvider>();
     final error = await context.read<CommunityProvider>().post(
@@ -78,7 +78,8 @@ class SavedRecipeDetailScreen extends StatelessWidget {
           posterName: auth.displayName,
           recipeId: saved.recipeId,
           recipe: saved.recipe,
-          caption: caption,
+          caption: draft.caption,
+          photoBase64: draft.photoBase64,
         );
     if (!context.mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

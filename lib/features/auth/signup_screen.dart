@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-import '../../core/constants/app_routes.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -10,6 +9,7 @@ import '../../providers/auth_provider.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/error_banner.dart';
 import '../../shared/widgets/primary_button.dart';
+import '../../shared/widgets/username_field.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -20,7 +20,7 @@ class SignUpScreen extends StatefulWidget {
 
 class _SignUpScreenState extends State<SignUpScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _nameCtrl = TextEditingController();
+  final _usernameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _confirmCtrl = TextEditingController();
@@ -38,7 +38,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
   @override
   void dispose() {
-    _nameCtrl.dispose();
+    _usernameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _confirmCtrl.dispose();
@@ -54,14 +54,18 @@ class _SignUpScreenState extends State<SignUpScreen> {
       return;
     }
     final ok = await context.read<AuthProvider>().signUp(
-          name: _nameCtrl.text,
+          username: _usernameCtrl.text,
           email: _emailCtrl.text,
           password: _passwordCtrl.text,
         );
     if (ok && mounted) {
-      await context.read<AuthProvider>().loadDietaryPreferences();
+      await context.read<AuthProvider>().afterLogin();
       if (!mounted) return;
-      Navigator.pushNamedAndRemoveUntil(context, AppRoutes.home, (r) => false);
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        context.read<AuthProvider>().homeRoute,
+        (r) => false,
+      );
     }
   }
 
@@ -89,11 +93,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ErrorBanner(message: errorText),
                   const SizedBox(height: AppSpacing.s16),
                 ],
-                AppTextField(
-                  hint: 'Full name',
-                  controller: _nameCtrl,
-                  validator: (v) => Validators.required(v, field: 'Name'),
-                ),
+                UsernameField(controller: _usernameCtrl),
                 const SizedBox(height: AppSpacing.s16),
                 AppTextField(
                   hint: 'Email',
