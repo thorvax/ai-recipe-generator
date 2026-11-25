@@ -333,10 +333,10 @@ service cloud.firestore {
       }
 
       allow read: if request.auth != null;
-      // Admins may set any valid counts (the one-time recount of old posts).
+      // Nobody (admins included) can set counts directly: every change
+      // must come with the like, comment or rating it counts.
       allow create, update: if request.auth != null && validShape()
-        && (zeroInit() || likeChange() || commentChange() || ratingChange()
-            || isAdmin());
+        && (zeroInit() || likeChange() || commentChange() || ratingChange());
       // With the post (owner deleting it in the same batch), or by an admin.
       allow delete: if isAdmin()
         || (request.auth != null
