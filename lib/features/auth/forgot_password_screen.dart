@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -21,21 +23,48 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _formKey = GlobalKey<FormState>();
   final _emailCtrl = TextEditingController();
 
+  /// Seconds to wait before sending another link (stops spamming inboxes).
+  static const int _cooldownSeconds = 60;
+
+  Timer? _timer;
+  int _cooldown = 0;
+
   @override
   void initState() {
     super.initState();
+    final auth = context.read<AuthProvider>();
+    // Coming back right after sending: keep counting down.
+    final sentAt = auth.lastPasswordResetSentAt;
+    if (sentAt != null) {
+      _startCooldown(
+        _cooldownSeconds - DateTime.now().difference(sentAt).inSeconds,
+      );
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) context.read<AuthProvider>().clearError();
+      if (mounted) auth.clearError();
     });
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _emailCtrl.dispose();
     super.dispose();
   }
 
+  void _startCooldown(int seconds) {
+    _timer?.cancel();
+    if (seconds <= 0) return;
+    setState(() => _cooldown = seconds);
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return timer.cancel();
+      setState(() => _cooldown--);
+      if (_cooldown <= 0) timer.cancel();
+    });
+  }
+
   Future<void> _submit() async {
+    if (_cooldown > 0) return;
     if (!_formKey.currentState!.validate()) return;
     final ok =
         await context.read<AuthProvider>().sendPasswordReset(_emailCtrl.text);
@@ -85,9 +114,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
                 const SizedBox(height: AppSpacing.s16),
                 PrimaryButton(
-                  label: 'Send Reset Link',
+                  label: _cooldown > 0
+                      ? 'Send again in ${_cooldown}s'
+                      : 'Send Reset Link',
                   isLoading: auth.isLoading,
-                  onPressed: _submit,
+                  onPressed: _cooldown > 0 ? null : _submit,
                 ),
               ],
             ),

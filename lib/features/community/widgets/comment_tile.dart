@@ -28,6 +28,9 @@ class CommentTile extends StatefulWidget {
   final VoidCallback onDelete;
   final VoidCallback onToggleLike;
 
+  /// Report someone else's comment to the admins.
+  final VoidCallback onReport;
+
   const CommentTile({
     super.key,
     required this.comment,
@@ -35,6 +38,7 @@ class CommentTile extends StatefulWidget {
     required this.onReply,
     required this.onDelete,
     required this.onToggleLike,
+    required this.onReport,
     this.isReply = false,
     this.isTombstone = false,
   });
@@ -238,6 +242,13 @@ class _CommentTileState extends State<CommentTile> {
                         icon: Icons.delete_outline,
                         label: 'Delete',
                         onTap: widget.onDelete,
+                      ),
+                    ] else ...[
+                      const SizedBox(width: AppSpacing.s12),
+                      _action(
+                        icon: Icons.flag_outlined,
+                        label: 'Report',
+                        onTap: widget.onReport,
                       ),
                     ],
                   ],

@@ -10,7 +10,9 @@ import '../../models/posted_recipe.dart';
 import '../../models/rating.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
+import '../../providers/profile_provider.dart';
 import '../../providers/saved_provider.dart';
+import '../../services/report_service.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/primary_button.dart';
@@ -20,6 +22,7 @@ import '../saved/widgets/category_sheet.dart';
 import 'widgets/comment_composer.dart';
 import 'widgets/comment_tile.dart';
 import 'widgets/poster_header.dart';
+import 'widgets/report_sheet.dart';
 import 'widgets/star_rating.dart';
 
 /// A posted recipe: full recipe, caption, ratings and comments.
@@ -113,6 +116,71 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           hasReplies: hasReplies,
         );
     if (error != null && mounted) _snack(error);
+  }
+
+  /// "Their profile picture" is only offered for an uploaded picture,
+  /// because admins can't remove a Google photo.
+  bool _hasCustomAvatar(String userId) =>
+      context.read<ProfileProvider>().profileFor(userId)?.hasCustomAvatar ??
+      false;
+
+  void _reportPost(PostedRecipe post, String uid) {
+    showReportSheet(
+      context,
+      reporterUid: uid,
+      subjects: [
+        ReportSubject(
+          'This post',
+          ReportTarget(
+            type: ReportType.post,
+            postId: post.id,
+            targetUserId: post.userId,
+          ),
+        ),
+        if (_hasCustomAvatar(post.userId))
+          ReportSubject(
+            'Their profile picture',
+            ReportTarget(
+              type: ReportType.avatar,
+              postId: post.id,
+              targetUserId: post.userId,
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _reportComment(Comment comment, String uid) {
+    // read, not select: this runs on tap, outside build().
+    final profileName =
+        context.read<ProfileProvider>().profileFor(comment.userId)?.name;
+    final name = (profileName == null || profileName.trim().isEmpty)
+        ? comment.userName
+        : profileName;
+    showReportSheet(
+      context,
+      reporterUid: uid,
+      subjects: [
+        ReportSubject(
+          'This comment',
+          ReportTarget(
+            type: ReportType.comment,
+            postId: widget.postId,
+            commentId: comment.id,
+            targetUserId: comment.userId,
+          ),
+        ),
+        if (_hasCustomAvatar(comment.userId))
+          ReportSubject(
+            "$name's profile picture",
+            ReportTarget(
+              type: ReportType.avatar,
+              postId: widget.postId,
+              targetUserId: comment.userId,
+            ),
+          ),
+      ],
+    );
   }
 
   Future<void> _toggleLike(Comment comment, String uid) async {
@@ -273,6 +341,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       onReply: () => _composerKey.currentState?.startReply(c),
       onDelete: () => _deleteComment(c, hasReplies: hasReplies),
       onToggleLike: () => _toggleLike(c, uid),
+      onReport: () => _reportComment(c, uid),
     );
   }
 
@@ -403,6 +472,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               onSelected: (_) => _deletePost(),
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'delete', child: Text('Delete post')),
+              ],
+            )
+          else
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_horiz),
+              onSelected: (_) => _reportPost(post, uid),
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'report', child: Text('Report')),
               ],
             ),
         ],

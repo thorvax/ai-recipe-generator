@@ -135,9 +135,13 @@ class AuthService {
     }
   }
 
+  /// When a reset link was last sent in this app session, or null.
+  static DateTime? lastPasswordResetSentAt;
+
   Future<void> sendPasswordReset(String email) async {
     try {
       await _auth.sendPasswordResetEmail(email: email.trim());
+      lastPasswordResetSentAt = DateTime.now();
     } on FirebaseAuthException catch (e) {
       throw AuthException(_friendlyMessage(e.code));
     }

@@ -34,6 +34,7 @@ class AuthProvider extends ChangeNotifier {
 
   /// When the verification email was last sent in this session, or null.
   DateTime? get lastVerificationSentAt => AuthService.lastVerificationSentAt;
+  DateTime? get lastPasswordResetSentAt => AuthService.lastPasswordResetSentAt;
 
   Future<bool> sendVerificationEmail() =>
       _run(() => _service.sendVerificationEmail());
