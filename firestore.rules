@@ -10,6 +10,49 @@ service cloud.firestore {
         && request.auth.token.email_verified == true;
     }
 
+    // NEW: moderators. An admin is a user with a doc admins/{uid}, added
+    // by hand in the Firebase Console. No app can create one (rule below).
+    // Checked last in each rule, so normal users don't pay for the lookup.
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    match /admins/{uid} {
+      // You may only check whether YOU are an admin.
+      allow get: if request.auth != null && request.auth.uid == uid;
+      allow list, create, update, delete: if false;
+    }
+
+    // NEW: reports of posts, comments or profile pictures, for admins.
+    // Doc id = {reporter uid}_{target_key}, so each user reports a thing once.
+    match /reports/{reportId} {
+      allow create: if emailVerified()
+        && request.resource.data.keys().hasOnly(['reporter_id', 'target_key',
+             'type', 'post_id', 'comment_id', 'target_user_id', 'reason', 'created_at'])
+        && request.resource.data.reporter_id == request.auth.uid
+        && request.resource.data.target_key is string
+        && request.resource.data.target_key.size() <= 300
+        && reportId == request.auth.uid + '_' + request.resource.data.target_key
+        && request.resource.data.type in ['post', 'comment', 'avatar']
+        && request.resource.data.post_id is string
+        && request.resource.data.post_id.size() <= 300
+        && (request.resource.data.get('comment_id', null) == null
+            || (request.resource.data.comment_id is string
+                && request.resource.data.comment_id.size() <= 300))
+        && request.resource.data.target_user_id is string
+        && request.resource.data.target_user_id != request.auth.uid
+        && request.resource.data.reason is string
+        && request.resource.data.reason.size() > 0
+        && request.resource.data.reason.size() <= 300
+        && request.resource.data.created_at == request.time;
+      // Reporters may check their own report (by its id) to avoid duplicates.
+      allow get: if request.auth != null
+        && (reportId.matches('^' + request.auth.uid + '_.*') || isAdmin());
+      allow list, delete: if isAdmin();
+      allow update: if false;
+    }
+
 
 
     match /users/{userId}/{document=**} {
@@ -83,6 +126,10 @@ service cloud.firestore {
         && (request.resource.data.get('photo_url', null) == null
             || (request.resource.data.photo_url is string
                 && request.resource.data.photo_url.size() <= 2048));
+      // NEW: an admin may only remove the custom picture (set it to null).
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['avatar_b64'])
+        && request.resource.data.avatar_b64 == null;
       allow delete: if false;
     }
 
@@ -95,8 +142,9 @@ service cloud.firestore {
                     && (request.resource.data.get('photo_b64', null) == null
                         || (request.resource.data.photo_b64 is string
                             && request.resource.data.photo_b64.size() <= 400000));
+      // NEW: admins may delete any post.
       allow delete: if request.auth != null
-                    && resource.data.user_id == request.auth.uid;
+                    && (resource.data.user_id == request.auth.uid || isAdmin());
 
       match /ratings/{userId} {
         allow read: if request.auth != null;
@@ -107,6 +155,8 @@ service cloud.firestore {
           && request.resource.data.rating_value >= 1
           && request.resource.data.rating_value <= 5
           && get(/databases/$(database)/documents/posted_recipes/$(postId)).data.user_id != request.auth.uid;
+        // NEW: admins clean up the ratings of a post they delete.
+        allow delete: if isAdmin();
       }
 
       match /comments/{commentId} {
@@ -160,8 +210,9 @@ service cloud.firestore {
             && request.resource.data.liked_by is list
             && onlyOwnLikeChanged())
         );
+        // NEW: admins may delete any comment.
         allow delete: if request.auth != null
-                      && resource.data.user_id == request.auth.uid;
+                      && (resource.data.user_id == request.auth.uid || isAdmin());
       }
     }
 
