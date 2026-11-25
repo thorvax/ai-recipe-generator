@@ -41,13 +41,13 @@ class InfoScreen extends StatelessWidget {
         sections: [
           (
             'What we store',
-            'Your name and email, the recipes you generate, the categories '
+            'Your username and email, the recipes you generate, the categories '
                 'you create, and the recipes you save.',
           ),
           (
             'What other users can see',
             'Recipes you post, their ratings, and your comments are visible to '
-                'other signed-in users, together with your name.',
+                'other signed-in users, together with your username.',
           ),
           (
             'Photos',
@@ -59,6 +59,17 @@ class InfoScreen extends StatelessWidget {
                 'picture, deleting a post, or deleting a comment removes '
                 'that photo. Only share photos you are comfortable making '
                 'visible to other users.',
+          ),
+          (
+            'Reports and moderation',
+            'If you report a post, comment or profile picture, we store your '
+                'report: what you reported, the reason you picked, any '
+                'details you wrote, and your account ID. Only MealMind admins '
+                'can read reports, and the person you reported is never told '
+                'who reported them. Admins can delete any post or comment and '
+                'remove any uploaded profile picture that breaks the rules. '
+                'Admins cannot see your email, your password or your saved '
+                'recipes.',
           ),
           (
             'AI-generated recipes',
