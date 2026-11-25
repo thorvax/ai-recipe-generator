@@ -34,6 +34,19 @@ int _mostLikedFirst(Comment a, Comment b) {
   return byLikes != 0 ? byLikes : _newestFirst(a, b);
 }
 
+/// Drops comments written before the post was (re)posted. Reposting a
+/// recipe reuses its post id, so comments from an earlier deleted post with
+/// that id would otherwise show up again. Comments still being written
+/// (no server time yet) are always kept, and nothing is dropped while the
+/// post's own time is unknown.
+List<Comment> commentsSince(List<Comment> comments, DateTime? postedAt) {
+  if (postedAt == null) return comments;
+  return comments.where((c) {
+    final time = c.createdAt;
+    return time == null || !time.isBefore(postedAt);
+  }).toList();
+}
+
 /// Groups a flat comment list into threads.
 ///
 /// - Top-level comments and replies are sorted oldest → newest.

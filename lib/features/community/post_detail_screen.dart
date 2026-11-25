@@ -6,6 +6,7 @@ import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../core/utils/comment_thread.dart';
 import '../../models/comment.dart';
+import '../../models/post_stats.dart';
 import '../../models/posted_recipe.dart';
 import '../../models/rating.dart';
 import '../../providers/auth_provider.dart';
@@ -15,6 +16,7 @@ import '../../providers/saved_provider.dart';
 import '../../services/report_service.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/loading_indicator.dart';
 import '../../shared/widgets/primary_button.dart';
 import '../../shared/widgets/recipe_content.dart';
 import '../../shared/widgets/recipe_image.dart';
@@ -36,8 +38,12 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
+  late final Stream<PostedRecipe?> _postStream;
   late final Stream<List<Rating>> _ratingsStream;
   late final Stream<List<Comment>> _commentsStream;
+  late final Stream<PostStats?> _statsStream;
+  late final Stream<bool> _likedStream;
+  bool _liking = false;
   final _composerKey = GlobalKey<CommentComposerState>();
 
   int _pendingRating = 0;
@@ -52,8 +58,84 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void initState() {
     super.initState();
     final community = context.read<CommunityProvider>();
+    _postStream = community.postStream(widget.postId);
     _ratingsStream = community.ratingsStream(widget.postId);
     _commentsStream = community.commentsStream(widget.postId);
+    _statsStream = community.statsStream(widget.postId);
+    final uid = context.read<AuthProvider>().currentUser?.uid ?? '';
+    _likedStream = community.likedStream(widget.postId, uid);
+  }
+
+  Future<void> _togglePostLike(String uid, bool liked) async {
+    if (_liking) return;
+    setState(() => _liking = true);
+    final error = await context.read<CommunityProvider>().setPostLike(
+          postId: widget.postId,
+          userId: uid,
+          liked: !liked,
+        );
+    if (!mounted) return;
+    setState(() => _liking = false);
+    if (error != null) _snack(error);
+  }
+
+  /// Heart button with the like count, and the comment count.
+  Widget _likeBar(String uid) {
+    return StreamBuilder<PostStats?>(
+      stream: _statsStream,
+      builder: (context, statsSnap) {
+        final stats = statsSnap.data ?? PostStats.zero;
+        return StreamBuilder<bool>(
+          stream: _likedStream,
+          builder: (context, likedSnap) {
+            final liked = likedSnap.data ?? false;
+            return Row(
+              children: [
+                OutlinedButton.icon(
+                  onPressed: likedSnap.hasData && !_liking
+                      ? () => _togglePostLike(uid, liked)
+                      : null,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor:
+                        liked ? AppColors.heart : AppColors.textPrimary,
+                    side: BorderSide(
+                      color: liked ? AppColors.heart : AppColors.border,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(AppRadius.r24),
+                    ),
+                  ),
+                  icon: Icon(
+                    liked
+                        ? Icons.favorite_rounded
+                        : Icons.favorite_border_rounded,
+                    color: liked ? AppColors.heart : AppColors.textSecondary,
+                  ),
+                  label: Text(
+                    stats.likeCount == 1 ? '1 like' : '${stats.likeCount} likes',
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s16),
+                const Icon(
+                  Icons.chat_bubble_outline_rounded,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+                const SizedBox(width: AppSpacing.s4),
+                Text(
+                  stats.commentCount == 1
+                      ? '1 comment'
+                      : '${stats.commentCount} comments',
+                  style: AppTextStyles.body2.copyWith(
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 
   void _snack(String text) {
@@ -76,6 +158,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final auth = context.read<AuthProvider>();
     return context.read<CommunityProvider>().addComment(
           postId: widget.postId,
+          commentId: draft.id,
           userId: uid,
           userName: auth.displayName,
           text: draft.text,
@@ -407,17 +490,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _commentsList(String uid) {
+  Widget _commentsList(String uid, DateTime? postedAt) {
     return StreamBuilder<List<Comment>>(
       stream: _commentsStream,
       builder: (context, snapshot) {
         if (snapshot.hasError) {
           return Text('Could not load comments.', style: AppTextStyles.body2);
         }
-        final threads = sortThreads(
-          buildThreads(snapshot.data ?? const <Comment>[]),
-          _sort,
+        // Hide comments left over from an earlier, deleted post with the
+        // same id (reposting a recipe reuses the post id).
+        final comments = commentsSince(
+          snapshot.data ?? const <Comment>[],
+          postedAt,
         );
+        final threads = sortThreads(buildThreads(comments), _sort);
         if (threads.isEmpty) {
           return Text(
             'No comments yet. Be the first!',
@@ -436,21 +522,37 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  /// Watches the post document itself, so the screen keeps working when
+  /// newer posts push this one out of the loaded feed pages. The feed copy
+  /// (if any) is shown instantly while the live copy loads.
   @override
   Widget build(BuildContext context) {
-    final post = context.watch<CommunityProvider>().findPost(widget.postId);
-    final uid = context.read<AuthProvider>().currentUser?.uid ?? '';
+    return StreamBuilder<PostedRecipe?>(
+      stream: _postStream,
+      initialData: context.read<CommunityProvider>().findPost(widget.postId),
+      builder: (context, snapshot) {
+        final post = snapshot.data;
+        if (post != null) return _content(context, post);
 
-    if (post == null) {
-      return Scaffold(
-        appBar: AppBar(),
-        body: const EmptyState(
-          icon: Icons.restaurant_menu_outlined,
-          title: 'Post not available',
-          message: 'This recipe was removed or could not be loaded.',
-        ),
-      );
-    }
+        final stillLoading =
+            snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasError;
+        return Scaffold(
+          appBar: AppBar(),
+          body: stillLoading
+              ? const LoadingIndicator()
+              : const EmptyState(
+                  icon: Icons.restaurant_menu_outlined,
+                  title: 'Post not available',
+                  message: 'This recipe was removed or could not be loaded.',
+                ),
+        );
+      },
+    );
+  }
+
+  Widget _content(BuildContext context, PostedRecipe post) {
+    final uid = context.read<AuthProvider>().currentUser?.uid ?? '';
 
     final isOwner = post.userId == uid;
     final isSaved = context.watch<SavedProvider>().isSaved(post.recipe.id);
@@ -513,6 +615,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 const SizedBox(height: AppSpacing.s12),
                 Text(post.caption, style: AppTextStyles.body1),
               ],
+              const SizedBox(height: AppSpacing.s12),
+              _likeBar(uid),
               const SizedBox(height: AppSpacing.s24),
               RecipeContent(recipe: post.recipe),
               const SizedBox(height: AppSpacing.s24),
@@ -527,7 +631,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 onSend: (draft) => _sendComment(uid, draft),
               ),
               const SizedBox(height: AppSpacing.s16),
-              _commentsList(uid),
+              _commentsList(uid, post.postedAt),
             ],
           ),
         ),

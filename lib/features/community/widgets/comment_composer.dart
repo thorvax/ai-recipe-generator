@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -13,6 +14,9 @@ import '../../../shared/widgets/photo_source_sheet.dart';
 
 /// What the composer sends.
 class CommentDraft {
+  /// Document id for this comment. The same draft sent again after an
+  /// error keeps its id, so the retry cannot create a duplicate.
+  final String id;
   final String text;
   final String? photoBase64;
 
@@ -21,6 +25,7 @@ class CommentDraft {
   final String? replyToUserName;
 
   const CommentDraft({
+    required this.id,
     required this.text,
     this.photoBase64,
     this.parentId,
@@ -59,6 +64,21 @@ class CommentComposerState extends State<CommentComposer> {
   bool _processing = false;
   bool _sending = false;
   String? _error;
+
+  // Id of the draft being sent, and what it contained. Reused only when
+  // the user retries the exact same comment after an error.
+  String? _draftId;
+  String? _draftSignature;
+
+  static final _random = Random.secure();
+  static const _idChars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+
+  /// A random 20-character id, the same shape as Firestore's auto ids.
+  static String _newId() => String.fromCharCodes(Iterable.generate(
+        20,
+        (_) => _idChars.codeUnitAt(_random.nextInt(_idChars.length)),
+      ));
 
   @override
   void dispose() {
@@ -140,11 +160,21 @@ class CommentComposerState extends State<CommentComposer> {
     var text = _ctrl.text.trim();
     if (text.length > _maxLength) text = text.substring(0, _maxLength);
 
+    // Same content as the failed attempt -> same id (no duplicate).
+    // Anything changed -> it is a new comment with a new id.
+    final signature =
+        '$_parentId|${_photoB64?.length}|${_photoB64.hashCode}|$text';
+    if (signature != _draftSignature || _draftId == null) {
+      _draftId = _newId();
+      _draftSignature = signature;
+    }
+
     setState(() {
       _sending = true;
       _error = null;
     });
     final error = await widget.onSend(CommentDraft(
+      id: _draftId!,
       text: text,
       photoBase64: _photoB64,
       parentId: _parentId,
@@ -161,6 +191,8 @@ class CommentComposerState extends State<CommentComposer> {
       _ctrl.clear();
       _photoB64 = null;
       _photoBytes = null;
+      _draftId = null;
+      _draftSignature = null;
       _parentId = null;
       _replyToName = null;
       _mention = null;

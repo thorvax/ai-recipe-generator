@@ -7,12 +7,14 @@ import '../../core/constants/diet_options.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_spacing.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../models/post_stats.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/community_provider.dart';
 import '../../shared/widgets/app_chip.dart';
 import '../../shared/widgets/app_text_field.dart';
 import '../../shared/widgets/empty_state.dart';
 import '../../shared/widgets/loading_indicator.dart';
+import '../../shared/widgets/secondary_button.dart';
 import 'post_detail_screen.dart';
 import 'widgets/post_card.dart';
 
@@ -69,6 +71,28 @@ class _PostedRecipesScreenState extends State<PostedRecipesScreen> {
       if (s.trim().isNotEmpty && !has(s)) options.add(s.trim());
     }
     return options;
+  }
+
+  /// Newest / Most liked / Most commented / Top rated.
+  Widget _sortChips(CommunityProvider community) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          const Icon(Icons.sort_rounded, size: 18, color: AppColors.textSecondary),
+          const SizedBox(width: AppSpacing.s8),
+          for (final sort in FeedSort.values)
+            Padding(
+              padding: const EdgeInsets.only(right: AppSpacing.s8),
+              child: AppChip(
+                label: sort.label,
+                selected: community.sort == sort,
+                onTap: () => community.setSort(sort),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   Widget _filterChips(CommunityProvider community, List<String> saved) {
@@ -140,6 +164,19 @@ class _PostedRecipesScreenState extends State<PostedRecipesScreen> {
 
     final posts = community.visiblePosts;
     if (posts.isEmpty) {
+      // Search and filters only see the loaded posts, so offer to look
+      // further back before giving up.
+      if (community.hasMore) {
+        return EmptyState(
+          icon: Icons.search_off,
+          title: 'No recipes match yet',
+          message: 'None of the latest recipes match. Load older recipes, '
+              'or try a different search or filter.',
+          actionLabel:
+              community.isLoadingMore ? 'Loading...' : 'Load older recipes',
+          onAction: community.isLoadingMore ? null : community.loadMore,
+        );
+      }
       return EmptyState(
         icon: Icons.search_off,
         title: 'No recipes match',
@@ -149,11 +186,19 @@ class _PostedRecipesScreenState extends State<PostedRecipesScreen> {
       );
     }
 
+    final showLoadMore = community.hasMore;
     return ListView.separated(
       padding: const EdgeInsets.only(bottom: AppSpacing.s16),
-      itemCount: posts.length,
+      itemCount: posts.length + (showLoadMore ? 1 : 0),
       separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s12),
       itemBuilder: (context, i) {
+        if (i == posts.length) {
+          return SecondaryButton(
+            label: 'Load more recipes',
+            isLoading: community.isLoadingMore,
+            onPressed: community.isLoadingMore ? null : community.loadMore,
+          );
+        }
         final post = posts[i];
         return PostCard(
           key: ValueKey(post.id),
@@ -202,6 +247,8 @@ class _PostedRecipesScreenState extends State<PostedRecipesScreen> {
               },
             ),
             const SizedBox(height: AppSpacing.s12),
+            _sortChips(community),
+            const SizedBox(height: AppSpacing.s8),
             _filterChips(community, saved),
             if (community.filtersAreDefaults) _defaultsNote(community),
             const SizedBox(height: AppSpacing.s12),

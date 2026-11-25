@@ -145,6 +145,29 @@ void main() {
     });
   });
 
+  group('commentsSince', () {
+    final postedAt = DateTime.utc(2026, 11, 22, 10, 5);
+
+    test('hides comments from before the post, keeps later ones', () {
+      final kept = commentsSince([
+        c('old', minute: 1),
+        c('same', minute: 5),
+        c('new', minute: 9),
+      ], postedAt);
+      expect(kept.map((x) => x.id), ['same', 'new']);
+    });
+
+    test('keeps comments still being sent (no server time yet)', () {
+      final kept = commentsSince([c('pending')], postedAt);
+      expect(kept.single.id, 'pending');
+    });
+
+    test('keeps everything while the post time is unknown', () {
+      final kept = commentsSince([c('old', minute: 1)], null);
+      expect(kept.single.id, 'old');
+    });
+  });
+
   group('Comment map', () {
     test('new comment writes defaults and leaves out empty fields', () {
       final map = c('a', minute: 1).toMap();

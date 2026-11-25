@@ -46,8 +46,9 @@ class InfoScreen extends StatelessWidget {
           ),
           (
             'What other users can see',
-            'Recipes you post, their ratings, and your comments are visible to '
-                'other signed-in users, together with your username.',
+            'Recipes you post, their ratings and likes, the recipes you like, '
+                'and your comments are visible to other signed-in users, '
+                'together with your username.',
           ),
           (
             'Photos',
@@ -56,9 +57,11 @@ class InfoScreen extends StatelessWidget {
                 'Other signed-in users can see them. If you sign in with '
                 'Google and have not set your own picture, your Google '
                 'profile photo is shown instead. Removing your profile '
-                'picture, deleting a post, or deleting a comment removes '
-                'that photo. Only share photos you are comfortable making '
-                'visible to other users.',
+                'picture removes it, and deleting a post or comment removes '
+                'its photo. When a post is deleted, the comments on it '
+                '(including their photos) are no longer shown in the app, '
+                'but they may stay stored in our database. Only share photos '
+                'you are comfortable making visible to other users.',
           ),
           (
             'Reports and moderation',

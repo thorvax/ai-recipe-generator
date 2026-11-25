@@ -135,6 +135,21 @@ service cloud.firestore {
 
 
     match /posted_recipes/{postId} {
+      // NEW (likes + sorting): counters live in post_stats/{postId}, not on
+      // the post, so a like or comment never re-sends the post's photo.
+      // Every like / comment / rating must bump its counter in the same
+      // batch or transaction; post_stats checks each change against it.
+      function statsPath() {
+        return /databases/$(database)/documents/post_stats/$(postId);
+      }
+      function statBefore(field) {
+        return exists(statsPath()) ? get(statsPath()).data.get(field, 0) : 0;
+      }
+      function statChangedBy(field, delta) {
+        return existsAfter(statsPath())
+          && getAfter(statsPath()).data.get(field, 0) == statBefore(field) + delta;
+      }
+
       allow read: if request.auth != null;
       allow create: if emailVerified()
                     && request.resource.data.user_id == request.auth.uid
@@ -146,6 +161,20 @@ service cloud.firestore {
       allow delete: if request.auth != null
                     && (resource.data.user_id == request.auth.uid || isAdmin());
 
+      // NEW: one like per user; the like count goes up/down with it.
+      match /likes/{userId} {
+        allow read: if request.auth != null;
+        allow create: if emailVerified()
+          && userId == request.auth.uid
+          && request.resource.data.keys().hasOnly(['user_id', 'post_id', 'created_at'])
+          && request.resource.data.user_id == request.auth.uid
+          && statChangedBy('like_count', 1);
+        allow delete: if (request.auth != null
+                          && userId == request.auth.uid
+                          && statChangedBy('like_count', -1))
+                      || isAdmin();
+      }
+
       match /ratings/{userId} {
         allow read: if request.auth != null;
         allow create: if emailVerified()
@@ -154,7 +183,9 @@ service cloud.firestore {
           && request.resource.data.rating_value is int
           && request.resource.data.rating_value >= 1
           && request.resource.data.rating_value <= 5
-          && get(/databases/$(database)/documents/posted_recipes/$(postId)).data.user_id != request.auth.uid;
+          && get(/databases/$(database)/documents/posted_recipes/$(postId)).data.user_id != request.auth.uid
+          // NEW: the rating count goes up in the same write.
+          && statChangedBy('rating_count', 1);
         // NEW: admins clean up the ratings of a post they delete.
         allow delete: if isAdmin();
       }
@@ -193,7 +224,9 @@ service cloud.firestore {
                   && request.resource.data.reply_to_user_name.size() <= 80))
           // NEW: new comments start undeleted with no likes
           && request.resource.data.get('deleted', false) == false
-          && request.resource.data.get('liked_by', []).size() == 0;
+          && request.resource.data.get('liked_by', []).size() == 0
+          // NEW: the comment count goes up in the same write.
+          && statChangedBy('comment_count', 1);
         // NEW: author soft-delete (deleted / comment_text / photo_b64 only),
         // or any signed-in user liking/unliking (liked_by only, own uid).
         allow update: if request.auth != null && (
@@ -217,5 +250,99 @@ service cloud.firestore {
     }
 
 
+
+    // NEW (likes + sorting): counters per post, used to sort the feed by
+    // Most liked / Most commented / Top rated. Each change must match a
+    // like, comment or rating written in the same batch/transaction.
+    match /post_stats/{postId} {
+      function postPath() {
+        return /databases/$(database)/documents/posted_recipes/$(postId);
+      }
+      function subPath(kind, id) {
+        return /databases/$(database)/documents/posted_recipes/$(postId)/$(kind)/$(id);
+      }
+      function before(field) {
+        return resource == null ? 0 : resource.data.get(field, 0);
+      }
+      function after(field) {
+        return request.resource.data.get(field, 0);
+      }
+      function same(field) {
+        return after(field) == before(field);
+      }
+      function sameLastComment() {
+        return request.resource.data.get('last_comment_id', '')
+          == (resource == null ? '' : resource.data.get('last_comment_id', ''));
+      }
+      function validShape() {
+        return request.resource.data.keys().hasOnly([
+            'like_count', 'comment_count', 'rating_count', 'rating_sum',
+            'rating_avg', 'last_comment_id'])
+          && after('like_count') is int && after('like_count') >= 0
+          && after('comment_count') is int && after('comment_count') >= 0
+          && after('rating_count') is int && after('rating_count') >= 0
+          && after('rating_sum') is int && after('rating_sum') >= 0
+          && (after('rating_avg') is int || after('rating_avg') is float);
+      }
+      // New post: its owner creates (or resets) the counters at zero in the
+      // same batch that creates the post.
+      function zeroInit() {
+        return !exists(postPath())
+          && after('like_count') == 0 && after('comment_count') == 0
+          && after('rating_count') == 0 && after('rating_sum') == 0
+          && after('rating_avg') == 0
+          && !('last_comment_id' in request.resource.data)
+          && getAfter(postPath()).data.user_id == request.auth.uid;
+      }
+      // +1 with your new like, -1 with your removed like.
+      function likeChange() {
+        let like = subPath('likes', request.auth.uid);
+        return same('comment_count') && same('rating_count')
+          && same('rating_sum') && same('rating_avg') && sameLastComment()
+          && ((after('like_count') == before('like_count') + 1
+                && !exists(like) && existsAfter(like))
+            || (after('like_count') == before('like_count') - 1
+                && exists(like) && !existsAfter(like)));
+      }
+      // +1 with a new comment; -1 when a live comment is deleted or
+      // soft-deleted. last_comment_id names that comment.
+      function commentChange() {
+        let comment = subPath('comments',
+            request.resource.data.get('last_comment_id', '_none'));
+        return request.resource.data.get('last_comment_id', '') is string
+          && same('like_count') && same('rating_count')
+          && same('rating_sum') && same('rating_avg')
+          && ((after('comment_count') == before('comment_count') + 1
+                && !exists(comment) && existsAfter(comment))
+            || (after('comment_count') == before('comment_count') - 1
+                && exists(comment)
+                && get(comment).data.get('deleted', false) == false
+                && (!existsAfter(comment)
+                    || getAfter(comment).data.get('deleted', false) == true)));
+      }
+      // Your new rating: count +1, sum + your stars, average = sum / count.
+      function ratingChange() {
+        let rating = subPath('ratings', request.auth.uid);
+        return same('like_count') && same('comment_count') && sameLastComment()
+          && !exists(rating) && existsAfter(rating)
+          && after('rating_count') == before('rating_count') + 1
+          && after('rating_sum') == before('rating_sum')
+               + getAfter(rating).data.rating_value
+          && math.abs(after('rating_avg')
+               - float(after('rating_sum')) / float(after('rating_count'))) < 0.001;
+      }
+
+      allow read: if request.auth != null;
+      // Admins may set any valid counts (the one-time recount of old posts).
+      allow create, update: if request.auth != null && validShape()
+        && (zeroInit() || likeChange() || commentChange() || ratingChange()
+            || isAdmin());
+      // With the post (owner deleting it in the same batch), or by an admin.
+      allow delete: if isAdmin()
+        || (request.auth != null
+            && exists(postPath())
+            && get(postPath()).data.user_id == request.auth.uid
+            && !existsAfter(postPath()));
+    }
   }
 }

@@ -5,7 +5,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_spacing.dart';
 import '../../../core/theme/app_text_styles.dart';
 import '../../../models/posted_recipe.dart';
-import '../../../models/rating.dart';
+import '../../../models/post_stats.dart';
 import '../../../providers/community_provider.dart';
 import '../../../shared/widgets/recipe_content.dart';
 import '../../../shared/widgets/recipe_image.dart';
@@ -31,7 +31,7 @@ class _PostCardState extends State<PostCard> {
   @override
   void initState() {
     super.initState();
-    // Load this post's average rating (cached by the provider).
+    // Load this post's counters (cached by the provider).
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         context.read<CommunityProvider>().loadStats(widget.post.id);
@@ -39,22 +39,43 @@ class _PostCardState extends State<PostCard> {
     });
   }
 
-  Widget _ratingRow(BuildContext context) {
-    final stats = context.select<CommunityProvider, RatingStats?>(
+  /// Stars + average, then likes and comments, in one line.
+  Widget _statsRow(BuildContext context) {
+    final stats = context.select<CommunityProvider, PostStats?>(
       (c) => c.statsFor(widget.post.id),
     );
     final onImage = AppTextStyles.caption.copyWith(color: AppColors.white);
     if (stats == null) return const SizedBox(height: 18);
 
-    if (stats.count == 0) return Text('No ratings yet', style: onImage);
+    Widget counter(IconData icon, int value, String label) => Semantics(
+          label: '$value $label',
+          excludeSemantics: true,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 16, color: AppColors.white),
+              const SizedBox(width: AppSpacing.s4),
+              Text('$value', style: onImage),
+            ],
+          ),
+        );
+
     return Row(
       children: [
-        StarRatingDisplay(value: stats.average, size: 16),
-        const SizedBox(width: AppSpacing.s8),
-        Text(
-          '${stats.average.toStringAsFixed(1)} (${stats.count})',
-          style: onImage,
-        ),
+        if (stats.count == 0)
+          Text('No ratings yet', style: onImage)
+        else ...[
+          StarRatingDisplay(value: stats.average, size: 16),
+          const SizedBox(width: AppSpacing.s8),
+          Text(
+            '${stats.average.toStringAsFixed(1)} (${stats.count})',
+            style: onImage,
+          ),
+        ],
+        const Spacer(),
+        counter(Icons.favorite_rounded, stats.likeCount, 'likes'),
+        const SizedBox(width: AppSpacing.s12),
+        counter(Icons.chat_bubble_rounded, stats.commentCount, 'comments'),
       ],
     );
   }
@@ -140,7 +161,7 @@ class _PostCardState extends State<PostCard> {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.s8),
-                  _ratingRow(context),
+                  _statsRow(context),
                 ],
               ),
             ),
