@@ -1,10 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:firebase_ai/firebase_ai.dart';
 import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
 
-import '../core/constants/env.dart';
 import '../models/generation_request.dart';
 import '../models/recipe.dart';
 
@@ -17,76 +16,65 @@ class GeminiException implements Exception {
   String toString() => message;
 }
 
-/// Calls the Gemini REST API directly with the http package.
+/// Calls Gemini through Firebase AI Logic (Gemini Developer API, free tier).
+/// The Gemini key stays inside Firebase, so it is NOT in the app or the APK.
 /// No UI code in here.
 class GeminiService {
-  static const String _baseUrl =
-      'https://generativelanguage.googleapis.com/v1beta/models';
+  /// Same model the website uses. Not a secret, so it lives here.
+  static const String modelName = 'gemini-3.5-flash-lite';
+
+  late final GenerativeModel _model = FirebaseAI.googleAI().generativeModel(
+    model: modelName,
+    generationConfig: GenerationConfig(
+      temperature: 0.8,
+      // Ask Gemini to answer in JSON that follows our schema:
+      responseMimeType: 'application/json',
+      responseSchema: _recipeSchema,
+    ),
+  );
 
   Future<Recipe> generateRecipe({
     required GenerationRequest request,
     required String userId,
   }) async {
-    final uri = Uri.parse('$_baseUrl/${Env.geminiModel}:generateContent');
-
-    final body = {
-      'contents': [
-        {
-          'role': 'user',
-          'parts': [
-            {'text': _buildPrompt(request)},
-          ],
-        },
-      ],
-      'generationConfig': {
-        'temperature': 0.8,
-        // Ask Gemini to answer in JSON that follows our schema:
-        'responseMimeType': 'application/json',
-        'responseSchema': _recipeSchema,
-      },
-    };
-
     // 1) Send the request
-    late http.Response response;
+    late GenerateContentResponse response;
     try {
-      response = await http
-          .post(
-            uri,
-            headers: {
-              'Content-Type': 'application/json',
-              'x-goog-api-key': Env.geminiApiKey,
-            },
-            body: jsonEncode(body),
-          )
+      response = await _model
+          .generateContent([Content.text(_buildPrompt(request))])
           .timeout(const Duration(seconds: 60));
     } on TimeoutException {
       throw GeminiException('The request took too long. Please try again.');
-    } catch (_) {
+    } on QuotaExceeded {
+      throw GeminiException(
+          'Free daily/minute limit reached. Wait a bit and try again.');
+    } on ServiceApiNotEnabled {
+      throw GeminiException(
+          'AI is not set up for this app yet (Firebase AI Logic is off).');
+    } on UnsupportedUserLocation {
+      throw GeminiException('The AI service is not available in your region.');
+    } on ServerException catch (e) {
+      debugPrint('Gemini server error: ${e.message}');
+      throw GeminiException('The AI service is busy right now. Please try again.');
+    } on FirebaseAIException catch (e) {
+      debugPrint('Gemini error: ${e.message}');
+      throw GeminiException(
+          'The AI could not create a recipe for this request. '
+          'Try different ingredients.');
+    } catch (e) {
+      debugPrint('Gemini request failed: $e');
       throw GeminiException(
           'Could not reach the AI service. Check your internet connection.');
     }
 
-    // 2) Check the HTTP status
-    if (response.statusCode != 200) {
-      debugPrint('Gemini error ${response.statusCode}: ${response.body}');
-      throw GeminiException(_messageForStatus(response.statusCode));
-    }
-
-    // 3) Read the JSON text out of the response
+    // 2) Read the JSON text out of the response
     try {
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
-      final candidates = data['candidates'] as List?;
-      if (candidates == null || candidates.isEmpty) {
+      final text = response.text;
+      if (text == null || text.trim().isEmpty) {
         throw GeminiException(
             'The AI could not create a recipe for this request. '
             'Try different ingredients.');
       }
-
-      final parts = candidates[0]['content']['parts'] as List;
-      final text = parts
-          .where((p) => p['text'] != null && p['thought'] != true)
-          .map((p) => p['text'])
-          .join();
 
       final recipeJson = jsonDecode(text) as Map<String, dynamic>;
       final recipe = Recipe.fromGemini(
@@ -103,8 +91,14 @@ class GeminiService {
       return recipe;
     } on GeminiException {
       rethrow;
+    } on FirebaseAIException catch (e) {
+      // Thrown by response.text when the answer was blocked (safety).
+      debugPrint('Gemini blocked: ${e.message}');
+      throw GeminiException(
+          'The AI could not create a recipe for this request. '
+          'Try different ingredients.');
     } catch (e) {
-      debugPrint('Gemini parse error: $e\n${response.body}');
+      debugPrint('Gemini parse error: $e');
       throw GeminiException('Could not read the AI response. Try again.');
     }
   }
@@ -138,57 +132,23 @@ Rules:
 ''';
   }
 
-  /// The JSON shape we want back from Gemini.
-  static const Map<String, dynamic> _recipeSchema = {
-    'type': 'OBJECT',
-    'properties': {
-      'recipe_name': {'type': 'STRING'},
-      'description': {'type': 'STRING'},
-      'prep_time': {'type': 'INTEGER'},
-      'cooking_time': {'type': 'INTEGER'},
-      'ingredients': {
-        'type': 'ARRAY',
-        'items': {
-          'type': 'OBJECT',
-          'properties': {
-            'ingredient_name': {'type': 'STRING'},
-            'quantity': {'type': 'STRING'},
-            'unit': {'type': 'STRING'},
+  /// The JSON shape we want back from Gemini. All properties are required.
+  static final Schema _recipeSchema = Schema.object(
+    properties: {
+      'recipe_name': Schema.string(),
+      'description': Schema.string(),
+      'prep_time': Schema.integer(),
+      'cooking_time': Schema.integer(),
+      'ingredients': Schema.array(
+        items: Schema.object(
+          properties: {
+            'ingredient_name': Schema.string(),
+            'quantity': Schema.string(),
+            'unit': Schema.string(),
           },
-          'required': ['ingredient_name', 'quantity', 'unit'],
-        },
-      },
-      'steps': {
-        'type': 'ARRAY',
-        'items': {'type': 'STRING'},
-      },
+        ),
+      ),
+      'steps': Schema.array(items: Schema.string()),
     },
-    'required': [
-      'recipe_name',
-      'description',
-      'prep_time',
-      'cooking_time',
-      'ingredients',
-      'steps',
-    ],
-  };
-
-  String _messageForStatus(int code) {
-    switch (code) {
-      case 400:
-        return 'The AI request was not accepted. Check your API key and model name.';
-      case 401:
-      case 403:
-        return 'The API key was rejected. Check the key in env.dart.';
-      case 404:
-        return 'AI model not found. Check the model name in env.dart.';
-      case 429:
-        return 'Free daily/minute limit reached. Wait a bit and try again.';
-      case 500:
-      case 503:
-        return 'The AI service is busy right now. Please try again.';
-      default:
-        return 'Something went wrong (error $code). Please try again.';
-    }
-  }
+  );
 }
